@@ -1,3 +1,4 @@
 iteration	commit	metric	cagr	max_drawdown	status	description
 0	3cfe57a	0.6515	0.1651	-0.2606	baseline	XGBoost regressor top-10, equal-weight, monthly rebalance, 3y train window, 10bps cost
 1	dabef48	0.6578	0.1569	-0.2461	keep	switch position sizing from equal-weight to inverse-volatility
+2	-	0.5536	0.1383	-0.3583	discard	tried HRP weighting (underperforms on small N=10 basket, likely overfits noisy clustering)
