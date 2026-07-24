@@ -14,7 +14,7 @@ class StrategyConfig:
     train_window_years: int = 3     # rolling training window
     label_horizon_days: int = 21    # ~1 trading month forward return
     top_n: int = 10                 # basket size
-    weighting: str = "equal"        # equal | inverse_vol | hrp
+    weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63
     transaction_cost_bps: float = 10.0  # round-trip cost charged on turnover, in basis points
