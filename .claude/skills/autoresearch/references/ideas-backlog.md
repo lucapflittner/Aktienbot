@@ -36,8 +36,10 @@ that differ hugely in volatility and correlation)
       retrying this without a structurally different ranking approach.
 - [x] Sweep `label_horizon_days` — **42 days is a big keep** (iteration 5,
       Sharpe 0.6578→1.1126, CAGR 15.7%→35.0%, MaxDD also improved to -24.0%).
-      This is now the baseline. Still untried: 10, 63 days — worth sweeping
-      further around 42 (e.g. 35, 50) since the jump from 21→42 was large.
+      Confirmed as a local optimum: 35 (iteration 16, Sharpe 0.9665) and 50
+      (iteration 17, Sharpe 0.9802) both underperform 42 against the
+      cost-realistic baseline. Still untried: 10, 63 (further out); a finer
+      grid around 38-45 could still exist but returns are likely diminishing.
 - [x] Sweep `train_window_years` — 5 alone (vs old baseline) looked good in
       isolation (Sharpe 0.87) but **discarded in combination with the new
       label_horizon=42 baseline** (iteration 6, Sharpe 0.8341 < 1.1126) — doesn't
@@ -75,9 +77,28 @@ that differ hugely in volatility and correlation)
 
 ## Tier 5 — costs / turnover
 
-- [ ] Sweep `transaction_cost_bps` sensitivity (5, 10, 20) — confirms
-      whether reported gains survive realistic cost assumptions; don't chase
-      a Sharpe win that only exists at 0 bps.
+- [x] Replaced the pure `transaction_cost_bps`-of-turnover assumption with a
+      realistic composite (iteration 15, **keep** — this is a correctness fix,
+      not an alpha experiment, adopted regardless of its Sharpe effect):
+      `spread_bps=7.5` (proportional, same mechanism as before) **+** a flat
+      `flat_fee_per_trade_eur=1.0` per buy/sell order, sized against a tracked,
+      compounding `capital_eur=10_000` starting balance. Effect on the
+      label_horizon=42 baseline was small (Sharpe 1.1126→1.0904) because
+      capital compounds fast at this CAGR; the same fee model costs
+      proportionally more on lower-return configs (e.g. the old label_horizon=21
+      setup lost 0.6578→0.6150) since the fixed fee stays relatively larger for
+      longer when capital grows slower. **Caveat:** `num_trades` currently
+      counts every name with *any* nonzero weight change (threshold 1e-6) as a
+      full trade, including tiny inverse-vol reweighting drift on continuing
+      holdings — a real trader likely wouldn't re-trade a <1% drift, so this may
+      still slightly overstate turnover-driven flat fees. A minimum-trade-size
+      threshold (e.g. skip trades below some % of position value) would be a
+      natural next refinement.
+- [ ] Sweep `spread_bps` sensitivity (5 vs 10) and `flat_fee_per_trade_eur`
+      sensitivity (0.5 vs 2) now that both exist — confirms how sensitive the
+      label_horizon=42 result is to the exact fee assumptions.
+- [ ] Add a minimum-trade-size threshold so trivial rebalancing drift doesn't
+      count as a full flat-fee trade (see caveat above).
 - [x] Turnover hysteresis (keep a held name unless its rank falls outside
       top_n+5) — **discarded** (iteration 13, Sharpe 0.6348 vs old baseline
       0.6578): also didn't meaningfully reduce avg_turnover as hoped. Untried
