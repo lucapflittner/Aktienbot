@@ -6,3 +6,4 @@ iteration	commit	metric	cagr	max_drawdown	status	description
 4	-	0.6016	0.1584	-0.3579	discard	tried rank_objective=True (XGBRanker cross-sectional rank instead of point regression) - found as an uncommitted local diff, verified properly: worse Sharpe and much deeper drawdown than kept baseline
 5	122d847	1.1126	0.3498	-0.2396	keep	extended forward-return label horizon from 21 to 42 trading days (~2 months) - smoother cross-sectional ranking signal, also improved max drawdown
 6	-	0.8341	0.2610	-0.3234	discard	tried train_window_years=5 combined with the new label_horizon=42 baseline - worse than label_horizon=42 alone (interaction effect: longer training window does not stack with the smoother label)
+7	-	0.9835	0.2816	-0.2306	discard	tried top_n=15 combined with the label_horizon=42 baseline - worse than label_horizon=42 alone (again does not stack additively)
