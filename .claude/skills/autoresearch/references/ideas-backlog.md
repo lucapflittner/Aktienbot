@@ -12,9 +12,9 @@ that differ hugely in volatility and correlation)
 - [x] `weighting="inverse_vol"` — **kept** (iteration 1, Sharpe 0.6515→0.6578).
 - [x] `weighting="hrp"` — **discarded** (iteration 2, Sharpe 0.5536): underperforms
       on this small N=10 basket, likely overfits noisy correlation clustering.
-- [ ] Combine: HRP for intra-basket weights + `vol_target` overlay for
-      basket-level leverage (both can be on at once). Still untried — note HRP
-      alone already lost, so this is a lower-priority combo now.
+- [x] Combine: HRP + `vol_target=0.15` (both original defaults) — **discard**:
+      Sharpe 0.5168, now underperforms even buy&hold. The two individually-failed
+      ideas stack rather than cancel — don't retry this combo in any variant.
 
 ## Tier 2 — volatility targeting overlay
 
@@ -61,10 +61,15 @@ that differ hugely in volatility and correlation)
 
 ## Tier 4 — universe / selection
 
-- [x] Sweep `top_n` — 15 alone (vs old baseline) looked good in isolation
-      (Sharpe 0.83) but **discarded in combination with label_horizon=42**
-      (iteration 7, Sharpe 0.9835 < 1.1126) — same non-stacking pattern as
-      train_window. 5 and 20 still untried against the label_horizon=42 baseline.
+- [x] Sweep `top_n` fully resolved: 15 and 20 both **discarded** against the
+      label_horizon=42 baseline (dilutes conviction). **top_n=5 is a big keep**
+      (iteration 18, Sharpe 1.0904→1.2129, CAGR 34%→48%) — but MaxDD deepened
+      substantially (-24.3%→-32.6%) and annual_vol rose to 38.5%. This is now
+      the baseline, with a real risk-tolerance tradeoff flagged to the user —
+      not a free lunch. Turnover hysteresis (buffer=2) combined with top_n=5
+      was tried and made Sharpe slightly worse (1.1986), though it did reduce
+      MaxDD and turnover a bit — a secondary risk/return tradeoff worth
+      revisiting if the user prioritizes drawdown over raw Sharpe.
 - [ ] Add a low-volatility or quality tilt as an additional feature in
       `features.py` (e.g. earnings-quality proxy, debt/equity if a
       fundamentals source is added later) — momentum-only cross-sections can
@@ -94,11 +99,17 @@ that differ hugely in volatility and correlation)
       still slightly overstate turnover-driven flat fees. A minimum-trade-size
       threshold (e.g. skip trades below some % of position value) would be a
       natural next refinement.
-- [ ] Sweep `spread_bps` sensitivity (5 vs 10) and `flat_fee_per_trade_eur`
-      sensitivity (0.5 vs 2) now that both exist — confirms how sensitive the
-      label_horizon=42 result is to the exact fee assumptions.
-- [ ] Add a minimum-trade-size threshold so trivial rebalancing drift doesn't
-      count as a full flat-fee trade (see caveat above).
+- [x] Swept `spread_bps` (5 vs 10) and `flat_fee_per_trade_eur` (0.5 vs 2) —
+      **sensitivity checks only, not adopted as config changes** (the real fee
+      is a broker fact, not a knob to tune for a better Sharpe). Result stays
+      Sharpe >1.0 across the whole plausible range (1.05-1.11 around the
+      then-current baseline), i.e. the strategy's edge is robust to reasonable
+      cost-assumption uncertainty.
+- [x] Minimum-trade-size threshold (skip re-trading <1pp weight drift) —
+      **discard**: essentially a no-op/marginal regression. The flat EUR 1 fee
+      is already small enough at this account size that snapping trivial drift
+      doesn't meaningfully reduce costs, and occasionally holds a stale weight
+      it would otherwise have updated.
 - [x] Turnover hysteresis (keep a held name unless its rank falls outside
       top_n+5) — **discarded** (iteration 13, Sharpe 0.6348 vs old baseline
       0.6578): also didn't meaningfully reduce avg_turnover as hoped. Untried
@@ -107,15 +118,21 @@ that differ hugely in volatility and correlation)
 
 ## Tier 6 — radical (use when stuck after 5+ discards)
 
-- [ ] Replace point-in-time top-N selection with a continuous rank-weighted
-      long-only book (weight proportional to predicted rank across the
-      *entire* investable universe, not just top-N) — changes the problem
-      from "pick 10 winners" to "tilt the whole index." Still untried.
-- [ ] Try a completely different model family for the ranking step —
-      LightGBM is blocked by a broken env install (see Tier 3); CatBoost isn't
-      installed either. A simple linear/ElasticNet factor model as a sanity
-      check that XGBoost itself isn't the bottleneck is still untried and needs
-      no new dependency.
+- [x] Continuous rank-weighted long-only book (tilt the whole universe,
+      linear decay to zero at the halfway rank) — **catastrophic discard**:
+      wiped out capital (Sharpe -0.86, CAGR -100%). Root cause isn't the
+      weighting math, it's the flat per-trade fee: holding ~150-250 names/month
+      instead of 5-10 means ~25x more flat-fee trades, which compounds
+      destructively at a EUR 10k account. Would only be viable at a much larger
+      capital_eur (where the flat fee is negligible) or with a pure bps cost
+      model — don't retry at this account size.
+- [x] Linear/ElasticNet factor model sanity check — **discard** (Sharpe 0.72
+      vs kept baseline, notably worse): confirms XGBoost's nonlinear/interaction
+      modeling is adding real value over a linear model on these features, i.e.
+      the model family isn't the bottleneck holding back further gains.
+- [ ] LightGBM is still blocked: the conda env's install crashes with a native
+      access violation even after a full uninstall+reinstall (tried twice).
+      CatBoost isn't installed. Neither has been fairly tested.
 - [ ] Bootstrap/purged walk-forward CV within each training window (instead
       of a single train/val split in `train_model`) to get a more robust
       hyperparameter choice before the monthly refit. Still untried.
@@ -129,16 +146,16 @@ constraint — this dataset has no volume/fundamentals/sector data)
       doesn't guarantee it transfers to this specific small-basket, cost-aware
       setup. Don't re-add this exact feature without a different angle (e.g.
       interacting it with momentum rather than adding it as a standalone column).
-- [ ] MAX effect (max daily return in trailing ~21 days; Bali, Cakici & Whitelaw
-      2011) — untried. Cross-sectionally *negative* predictor (lottery-demand
-      anomaly) — implement as a new feature in `engineer_features`, e.g.
-      `daily.rolling(21).max()`, and let the model learn the sign itself (it's
-      cross-sectionally z-scored anyway).
-- [ ] Idiosyncratic volatility vs. an equal-weighted universe proxy (Ang, Hodrick,
-      Xing & Zhang 2006) — untried, more implementation effort (needs a rolling
-      regression per ticker against the same-universe proxy) and per Bali et al.
-      2011 is highly correlated with/subsumed by the MAX effect above — try MAX
-      first since it's simpler and may capture most of the same signal.
+- [x] MAX effect (max daily return, trailing 21 days) — **discard** (Sharpe
+      1.0004 vs kept baseline): hurt performance despite academic backing.
+- [x] Idiosyncratic volatility vs. equal-weighted universe proxy (63d rolling
+      beta) — **discard** (Sharpe 1.0255): also hurt, consistent with the MAX
+      effect finding. Three literature factors tried now (pth_52wk, MAX, IVOL)
+      and all three have hurt performance on this specific small-basket,
+      cost-aware, S&P-500-only setup — worth pausing this whole factor-mining
+      approach unless a genuinely different data source (fundamentals, sector,
+      volume) becomes available; price-only anomalies from the literature
+      don't seem to transfer here.
 
 ## Sources consulted (2026 literature scan)
 
