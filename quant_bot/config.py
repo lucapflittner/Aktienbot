@@ -13,7 +13,7 @@ class StrategyConfig:
     end_year: int = 2026
     train_window_years: int = 3     # rolling training window
     label_horizon_days: int = 42    # ~2 trading month forward return
-    top_n: int = 10                 # basket size
+    top_n: int = 5                  # basket size
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63
