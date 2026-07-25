@@ -4,3 +4,4 @@ iteration	commit	metric	cagr	max_drawdown	status	description
 2	-	0.5536	0.1383	-0.3583	discard	tried HRP weighting (underperforms on small N=10 basket, likely overfits noisy clustering)
 3	-	0.2722	0.0313	-0.2509	discard	tried vol-targeting overlay (target 15%): cuts vol as intended but crushes CAGR/Sharpe - reactive vol-scaling levers up right before crashes (matches literature caveat on real-time vol-mgmt performance)
 4	-	0.6016	0.1584	-0.3579	discard	tried rank_objective=True (XGBRanker cross-sectional rank instead of point regression) - found as an uncommitted local diff, verified properly: worse Sharpe and much deeper drawdown than kept baseline
+5	122d847	1.1126	0.3498	-0.2396	keep	extended forward-return label horizon from 21 to 42 trading days (~2 months) - smoother cross-sectional ranking signal, also improved max drawdown
