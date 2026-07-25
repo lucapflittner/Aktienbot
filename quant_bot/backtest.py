@@ -59,6 +59,7 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
 
     monthly_returns, turnovers, periods = [], [], []
     prev_weights = pd.Series(dtype=float)
+    capital = cfg.capital_eur
 
     for period in months:
         current_start = period.to_timestamp(how="start")
@@ -108,8 +109,10 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
 
         # --- turnover vs previous month's basket, for transaction costs ---
         all_names = weights.index.union(prev_weights.index)
-        turnover = float((weights.reindex(all_names, fill_value=0.0)
-                           - prev_weights.reindex(all_names, fill_value=0.0)).abs().sum())
+        weight_deltas = (weights.reindex(all_names, fill_value=0.0)
+                          - prev_weights.reindex(all_names, fill_value=0.0))
+        turnover = float(weight_deltas.abs().sum())
+        num_trades = int((weight_deltas.abs() > 1e-6).sum())
         turnovers.append(turnover)
         prev_weights = weights
 
@@ -134,11 +137,13 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
             basket_daily = (hist_returns[top_n_tickers].fillna(0.0) * weights.reindex(top_n_tickers).fillna(0.0)).sum(axis=1)
             leverage = volatility_target_scale(basket_daily, cfg.vol_target, cfg.vol_target_lookback)
 
-        cost = (cfg.transaction_cost_bps / 10_000.0) * turnover
-        net_return = raw_return * leverage - cost
+        spread_cost = (cfg.spread_bps / 10_000.0) * turnover
+        flat_fee_cost = (num_trades * cfg.flat_fee_per_trade_eur) / capital if capital > 0 else 0.0
+        net_return = raw_return * leverage - spread_cost - flat_fee_cost
 
         monthly_returns.append(net_return)
         periods.append(period)
+        capital *= (1.0 + net_return)
 
     return monthly_returns, turnovers, periods
 

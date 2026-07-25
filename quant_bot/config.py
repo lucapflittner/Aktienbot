@@ -17,7 +17,9 @@ class StrategyConfig:
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63
-    transaction_cost_bps: float = 10.0  # round-trip cost charged on turnover, in basis points
+    spread_bps: float = 7.5          # bid-ask spread cost charged on turnover, in basis points
+    capital_eur: float = 10_000.0   # assumed account size, for sizing the flat per-trade fee below
+    flat_fee_per_trade_eur: float = 1.0  # fixed broker fee per buy or sell order (not per round-trip)
     model_n_estimators: int = 300
     model_max_depth: int = 5
     model_learning_rate: float = 0.1
