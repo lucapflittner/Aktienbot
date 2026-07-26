@@ -25,8 +25,13 @@ def _zscore(s: pd.Series) -> pd.Series:
     return (s - s.mean()) / std
 
 
-def engineer_features(price_df: pd.DataFrame) -> pd.DataFrame:
-    """price_df: Date-indexed wide frame, one column per ticker (close prices)."""
+def engineer_features(price_df: pd.DataFrame, volume_df: pd.DataFrame = None,
+                       include_volume_features: bool = False) -> pd.DataFrame:
+    """price_df: Date-indexed wide frame, one column per ticker (close prices).
+    volume_df (optional): same shape, daily trading volume -- only used when
+    include_volume_features is True, so passing it is harmless/inert by
+    default (backward compatible with callers, incl. regression_check.py's
+    synthetic-price-only tests, that never pass volume at all)."""
     df = price_df.sort_index()
 
     r2y = df.pct_change(500, fill_method=None)
@@ -64,6 +69,20 @@ def engineer_features(price_df: pd.DataFrame) -> pd.DataFrame:
         tag(sma20, "sma20_rel"), tag(sma50, "sma50_rel"), tag(sma200, "sma200_rel"),
         tag(momo_sharpe, "momo_sharpe"),
     ]
+
+    if include_volume_features and volume_df is not None:
+        vol_aligned = volume_df.reindex(index=df.index, columns=df.columns)
+        dollar_volume = df * vol_aligned
+        # Amihud (2002) illiquidity: |return| per unit of dollar volume traded,
+        # trailing-averaged -- higher means harder to trade without moving the
+        # price. Cross-sectional z-score below makes the raw scale irrelevant.
+        illiq_amihud = (daily.abs() / dollar_volume.replace(0, np.nan)).rolling(63).mean()
+        # today's volume relative to its own trailing average -- an unusual
+        # activity spike, often a precursor to news-driven moves.
+        volume_spike = vol_aligned / vol_aligned.rolling(63).mean()
+        parts.append(tag(illiq_amihud, "illiq_amihud_63d"))
+        parts.append(tag(volume_spike, "volume_spike"))
+
     features = pd.concat(parts, axis=1)
 
     stacked = features.stack(level=1, future_stack=True).reset_index()
@@ -94,13 +113,15 @@ def create_labels(price_df: pd.DataFrame, interval: int) -> pd.Series:
     return stacked.set_index(["date", "ticker"])["future_return"]
 
 
-def get_features_and_labels(price_df: pd.DataFrame, label_horizon_days: int):
+def get_features_and_labels(price_df: pd.DataFrame, label_horizon_days: int,
+                             volume_df: pd.DataFrame = None, include_volume_features: bool = False):
     """engineer_features/create_labels are expensive (~30-60s over 884 tickers);
     cache the result keyed on this file's own source + the label horizon, so an
     autoresearch iteration that only changes the model/weighting reuses it."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(
-        (Path(__file__).read_text() + str(label_horizon_days) + str(price_df.shape)).encode()
+        (Path(__file__).read_text() + str(label_horizon_days) + str(price_df.shape)
+         + str(include_volume_features) + str(volume_df.shape if volume_df is not None else "none")).encode()
     ).hexdigest()[:16]
     feat_path = CACHE_DIR / f"features_{key}.parquet"
     label_path = CACHE_DIR / f"labels_{key}.parquet"
@@ -110,7 +131,7 @@ def get_features_and_labels(price_df: pd.DataFrame, label_horizon_days: int):
         labels = pd.read_parquet(label_path)["future_return"]
         return features, labels
 
-    features = engineer_features(price_df)
+    features = engineer_features(price_df, volume_df, include_volume_features)
     labels = create_labels(price_df, label_horizon_days)
     common = features.index.intersection(labels.index)
     features, labels = features.loc[common], labels.loc[common]

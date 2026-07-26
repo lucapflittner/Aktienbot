@@ -12,6 +12,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PRICE_XLSX = REPO_ROOT / "stock_portfoliomanagement_app" / "price_df.xlsx"
 PRICE_PARQUET = Path(__file__).resolve().parent / "cache" / "prices.parquet"
+VOLUME_PARQUET = Path(__file__).resolve().parent / "cache" / "volume.parquet"
 SP500_CSV = REPO_ROOT / "S&P 500 Historical Components & Changes.csv"
 
 
@@ -25,6 +26,15 @@ def load_prices() -> pd.DataFrame:
         df.to_parquet(PRICE_PARQUET)
     df["Date"] = pd.to_datetime(df["Date"])
     return df.set_index("Date").sort_index()
+
+
+def load_volume() -> pd.DataFrame:
+    """Daily trading volume, Date-indexed, one column per ticker. Backfilled
+    separately via scripts/backfill_volume.py (the original corpus only ever
+    fetched Close) -- regenerate that script's output if this file is missing,
+    there is no xlsx source to fall back to."""
+    df = pd.read_parquet(VOLUME_PARQUET)
+    return df.sort_index()
 
 
 def load_universe(window_years: int, start_year: int) -> pd.DataFrame:

@@ -24,6 +24,7 @@ class StrategyConfig:
     model_max_depth: int = 5
     model_learning_rate: float = 0.1
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
+    include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
 
     def as_dict(self):
         return asdict(self)
