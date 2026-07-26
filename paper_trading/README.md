@@ -1,10 +1,22 @@
 # paper_trading
 
 Forward paper-trading test for `quant_bot`'s current `DEFAULT_CONFIG`. Runs
-once a day via a Windows scheduled task (`AktienbotPaperTrading`, 23:00 daily),
-applying the exact same trained-model + weighting + cost-model pipeline as
-`benchmark.py` to genuinely new daily closes that autoresearch never saw or
-optimized against.
+once a day via a GitHub Actions scheduled workflow (`.github/workflows/
+paper_trading.yml`, 22:00 UTC daily) — hosted in the cloud, no local machine
+needs to be running. Applies the exact same trained-model + weighting +
+cost-model pipeline as `benchmark.py` to genuinely new daily closes that
+autoresearch never saw or optimized against.
+
+The workflow checks out the repo, runs `run_daily.py`, then commits the
+updated `state.json` / `nav_log.csv` / `live_prices.parquet` back to the repo
+itself — that's the persistence mechanism, there's no external database.
+(A previous version of this ran on a local Windows scheduled task; that's been
+removed in favor of this, to avoid two independent paper portfolios diverging.)
+
+**One-time manual step required:** GitHub Actions' default `GITHUB_TOKEN` needs
+write access to push commits. In the repo's GitHub page: Settings → Actions →
+General → "Workflow permissions" → select "Read and write permissions" → Save.
+Without this the workflow will run but fail on the final push step.
 
 **Why this exists:** the backtest's headline numbers came from trying 30+
 config variants and keeping the best on one fixed historical window (2018-2026)
@@ -26,17 +38,20 @@ going forward on data nobody selected against.
   charging the same `spread_bps` + `flat_fee_per_trade_eur` cost model as the
   backtest. A parallel equal-weight buy-and-hold paper portfolio is tracked for
   comparison.
-- `run_daily.py` is the entry point the scheduled task calls; safe to run more
-  than once a day or after a gap (it only processes days it hasn't seen yet).
+- `run_daily.py` is the entry point the workflow calls; safe to run more than
+  once a day or after a gap (it only processes days it hasn't seen yet) --
+  also runnable locally any time: `"C:\Users\lucap\anaconda3\envs\tf-gpu\python.exe" -m paper_trading.run_daily`
 - `report.py` prints current NAV, cumulative/annualized return, and holdings —
   run it anytime: `"C:\Users\lucap\anaconda3\envs\tf-gpu\python.exe" -m paper_trading.report`
+  (pull latest first: `git pull`, since the state now lives in the repo).
 
-## State (gitignored, regenerated at runtime)
+## State (tracked in git — this repo IS the database)
 
 - `state.json` — cash, share holdings (bot + benchmark), last-processed date.
 - `nav_log.csv` — one row per trading day: NAV and cumulative return, both books.
 - `live_prices.parquet` — accumulated live closes since this system started.
-- `run_daily.log` — stdout/stderr from every scheduled run, for troubleshooting.
+- `run_daily.log` — gitignored (transient); GitHub Actions' own run logs are
+  the durable record of what happened on the cloud side.
 
 ## Known limitations
 
@@ -46,15 +61,17 @@ going forward on data nobody selected against.
   as of this writing — possibly a transient Yahoo issue; `BRK.B`/`BF.B` aren't
   in the historical dataset at all due to dot/dash ticker-symbol mismatches).
   Missing names are simply excluded from that day's picks.
-- The Windows scheduled task is "run only when logged on" (no stored
-  credentials) — it won't fire if the machine is fully shut down or logged out
-  at 23:00, only if it's locked/idle.
 - Costs are simulated identically to the backtest (spread_bps + flat fee
   against a compounding capital_eur) — still not real broker execution, slippage,
   or taxes.
+- GitHub's cron scheduling isn't second-precise and can be delayed by minutes
+  to (rarely) longer under platform load -- fine for a once-daily job.
 
-## Removing the scheduled task
+## Removing / pausing
 
+Disable without deleting: repo Settings → Actions → General → disable, or
+delete `.github/workflows/paper_trading.yml`. To run locally again instead,
+re-add the Windows scheduled task:
 ```
-schtasks /Delete /TN "AktienbotPaperTrading" /F
+schtasks /Create /TN "AktienbotPaperTrading" /TR "G:\Programmierzeugs\Aktienbot\paper_trading\run_daily.bat" /SC DAILY /ST 23:00 /F
 ```
