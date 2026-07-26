@@ -21,9 +21,16 @@ Without this the workflow will run but fail on the final push step.
 **Why this exists:** the backtest's headline numbers came from trying 30+
 config variants and keeping the best on one fixed historical window (2018-2026)
 — a classic setup for overfitting. This system exists to answer, honestly and
-without fabricated data, whether the picked config (`top_n=5`,
-`label_horizon_days=42`, inverse-vol weighting, realistic costs) still works
-going forward on data nobody selected against.
+without fabricated data, whether the picked config (currently `top_n=5`,
+`rebalance_freq=W`, `label_horizon_days=10`, inverse-vol weighting, realistic
+costs) still works going forward on data nobody selected against.
+
+Inception was reset on 2026-07-26 when the kept config switched from monthly
+to weekly rebalancing (the old monthly-era holdings/history weren't
+meaningfully migratable to the new cadence). Whenever `rebalance_freq` or
+`label_horizon_days` changes as a kept autoresearch result, expect another
+reset — the forward test should reflect whatever's actually the current best
+config, not a stale one.
 
 ## How it works
 
@@ -33,11 +40,11 @@ going forward on data nobody selected against.
   `price_df.xlsx` is never touched.
 - `engine.py` walks forward through every new trading day, one at a time:
   marks the paper portfolio to market daily, and on the first trading day of
-  each new month, retrains on `quant_bot`'s exact `train_model` using only data
-  strictly before that day, ranks the current universe, and rebalances —
-  charging the same `spread_bps` + `flat_fee_per_trade_eur` cost model as the
-  backtest. A parallel equal-weight buy-and-hold paper portfolio is tracked for
-  comparison.
+  each new period (per `cfg.rebalance_freq` -- currently weekly), retrains on
+  `quant_bot`'s exact `train_model` using only data strictly before that day,
+  ranks the current universe, and rebalances — charging the same `spread_bps`
+  + `flat_fee_per_trade_eur` cost model as the backtest. A parallel
+  equal-weight buy-and-hold paper portfolio is tracked for comparison.
 - `run_daily.py` is the entry point the workflow calls; safe to run more than
   once a day or after a gap (it only processes days it hasn't seen yet) --
   also runnable locally any time: `"C:\Users\lucap\anaconda3\envs\tf-gpu\python.exe" -m paper_trading.run_daily`

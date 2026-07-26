@@ -81,16 +81,17 @@ def _weights_from_shares(shares: dict, price_row: pd.Series) -> pd.Series:
 
 def _rebalance_bot(cfg, features: pd.DataFrame, labels: pd.Series, prices: pd.DataFrame,
                     D: pd.Timestamp, state: dict) -> dict:
-    # engineer_features resamples to one row per ticker per month, dated at
-    # that month's first trading day -- NOT at today's date D (D may be any
-    # day of the month, e.g. the first run of this system starting mid-month).
-    # Find that anchor date so test_mask actually matches real feature rows,
-    # then execute the resulting trade at D's real closing price.
+    # engineer_features resamples to one row per ticker per rebalance period
+    # (cfg.rebalance_freq), dated at that period's first trading day -- NOT at
+    # today's date D (D may be any day within the period, e.g. the first run
+    # of this system starting mid-period). Find that anchor date so test_mask
+    # actually matches real feature rows, then execute the resulting trade at
+    # D's real closing price.
     feature_dates = features.index.get_level_values("date")
-    this_month_dates = feature_dates[feature_dates.to_period("M") == D.to_period("M")]
-    if len(this_month_dates) == 0:
-        return {"skipped": "no feature row for this month yet"}
-    month_anchor = this_month_dates.min()
+    this_period_dates = feature_dates[feature_dates.to_period(cfg.rebalance_freq) == D.to_period(cfg.rebalance_freq)]
+    if len(this_period_dates) == 0:
+        return {"skipped": "no feature row for this period yet"}
+    month_anchor = this_period_dates.min()
 
     train_start = month_anchor - pd.DateOffset(years=cfg.train_window_years)
     train_mask = (
@@ -185,7 +186,7 @@ def process_new_days() -> list:
         return []
 
     universe_prices = prices[universe]
-    features = engineer_features(universe_prices)
+    features = engineer_features(universe_prices, resample_freq=cfg.rebalance_freq)
     # NB: do NOT intersect features with labels.index here. create_labels'
     # .stack() drops any row whose forward label isn't computable yet -- which
     # is every row from roughly the last label_horizon_days/21 months, i.e.
@@ -197,8 +198,9 @@ def process_new_days() -> list:
     summaries = []
     log_rows = []
     for D in new_dates:
-        this_month = D.to_period("M")
-        is_rebalance = state["last_rebalance_month"] is None or this_month > pd.Period(state["last_rebalance_month"])
+        this_period = D.to_period(cfg.rebalance_freq)
+        is_rebalance = (state["last_rebalance_month"] is None
+                        or this_period > pd.Period(state["last_rebalance_month"], freq=cfg.rebalance_freq))
 
         detail = {"date": str(D.date()), "is_rebalance": is_rebalance}
         if is_rebalance:
@@ -206,7 +208,7 @@ def process_new_days() -> list:
             detail.update(rb)
             if "skipped" not in rb:
                 _rebalance_bench(universe_prices, universe, D, state)
-                state["last_rebalance_month"] = str(this_month)
+                state["last_rebalance_month"] = str(this_period)
                 state["trade_log"].append(detail)
 
         price_row = _price_asof(universe_prices, D)
