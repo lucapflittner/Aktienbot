@@ -1,3 +1,31 @@
+## Tier 0 — rebalance frequency (new dimension, added 2026-07-26)
+
+Previously hardcoded monthly everywhere; generalized to a config parameter
+(`rebalance_freq`: W/M/Q/Y) via a harness commit. Day-trading is NOT feasible
+with this dataset at all (only end-of-day closes, no intraday data) so it was
+never on the table.
+
+- [x] **Weekly (`rebalance_freq="W"`, `label_horizon_days=10`) is a big keep**
+      (iteration 35, Sharpe 1.2129→1.5590, CAGR 48.1%→70.7%, MaxDD also
+      improved -32.6%→-26.1%). 342 periods — more statistically robust than
+      the 79-month baseline ever was. This is now the baseline.
+- [x] Quarterly (`label_horizon_days=126`) — **discarded** (iteration 37,
+      Sharpe 0.78): much worse, and only 27 periods.
+- [x] Yearly (`label_horizon_days=252`) — **discarded** (iteration 38, Sharpe
+      1.06): worse than weekly, and only 6 periods — essentially
+      statistically meaningless at n=6, don't trust a yearly-rebalance Sharpe
+      from this backtest window regardless of what it says.
+- [ ] Not yet tried: daily rebalancing (data supports it mechanically, even
+      though true day-trading doesn't apply) — worth a data point, though
+      given quarterly/yearly went the "less frequent is worse" direction and
+      weekly beat monthly, the trend so far favors *more* frequent rebalancing
+      up to some point; daily would 5x the trade count vs weekly and its flat
+      EUR1/trade cost impact untested at that frequency.
+      **CAUTION per iteration 35's finding:** a 1.56 Sharpe / 70.7% CAGR
+      backtest result is unusually strong — before adopting a config this
+      aggressive as anything more than a research finding, see the paper_trading
+      forward test's actual results once enough time has passed.
+
 # Idea backlog (SOTA-informed)
 
 Grounded in a literature scan done when this skill was set up (HRP,
