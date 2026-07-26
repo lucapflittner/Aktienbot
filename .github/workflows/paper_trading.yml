@@ -1,0 +1,34 @@
+name: Paper Trading Daily
+
+on:
+  schedule:
+    # 22:00 UTC ~= 23:00-24:00 CET/CEST depending on daylight saving
+    - cron: "0 22 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pandas numpy scipy xgboost scikit-learn yfinance openpyxl pyarrow
+
+      - name: Run paper trading engine
+        run: python -m paper_trading.run_daily
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add paper_trading/state.json paper_trading/nav_log.csv paper_trading/live_prices.parquet
+          git diff --staged --quiet || git commit -m "paper_trading: daily update $(date -u +%Y-%m-%d)"
+          git push
