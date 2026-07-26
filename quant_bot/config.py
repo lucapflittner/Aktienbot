@@ -12,7 +12,7 @@ class StrategyConfig:
     start_year: int = 2018          # backtest evaluation window (fast, real, out-of-sample)
     end_year: int = 2026
     train_window_years: int = 3     # rolling training window
-    label_horizon_days: int = 42    # ~2 trading month forward return
+    label_horizon_days: int = 10    # ~2 trading weeks forward return
     top_n: int = 5                  # basket size
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
@@ -25,7 +25,7 @@ class StrategyConfig:
     model_learning_rate: float = 0.1
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
     include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
-    rebalance_freq: str = "M"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)
+    rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)
 
     def as_dict(self):
         return asdict(self)
