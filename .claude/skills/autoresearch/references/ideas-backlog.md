@@ -137,8 +137,38 @@ that differ hugely in volatility and correlation)
       of a single train/val split in `train_model`) to get a more robust
       hyperparameter choice before the monthly refit. Still untried.
 
-## Tier 7 — new price-only factors (2026 literature scan, close-price-only
-constraint — this dataset has no volume/fundamentals/sector data)
+## Tier 7 — new factors (2026 literature scan)
+
+Volume data was backfilled (`scripts/backfill_volume.py` -> `quant_bot/cache/
+volume.parquet`, 884 tickers, 2007-2026, 11 tickers with a real volume-specific
+gap out of 884 — see `paper_trading/README.md` for the 6 currently-broken
+yfinance symbols this project has hit repeatedly). `quant_bot.data.load_volume()`
+and `engineer_features(..., volume_df, include_volume_features)` now exist and
+are wired through `benchmark.py` (harness commit, off by default, backward
+compatible) — the plumbing is real infrastructure now, just no feature has
+justified turning it on yet:
+
+- [x] Amihud illiquidity (63d, |return|/dollar-volume) + relative volume spike
+      (today's volume / 63d average) — **discarded**, both together (Sharpe
+      1.0615) and isolated: illiq alone 1.1455 (still worse), volume_spike
+      alone 1.2184 (technically +0.0055 over baseline, but CAGR lower and
+      MaxDD worse — noise, not a robust gain, and not worth the added
+      data-pipeline complexity). Fourth factor-mining attempt in a row to
+      fail on this specific small-basket, cost-aware setup (after pth_52wk,
+      MAX effect, idiosyncratic vol) — this isn't just a "price-only factors
+      don't transfer" pattern anymore, it looks more like this exact
+      setup (top_n=5, label_horizon=42, XGBoost point regression) is already
+      close to a local optimum that additional engineered features don't
+      easily improve on. If revisiting factor-mining, consider first
+      questioning that premise (e.g. does adding features even help the
+      *existing* kept features, or has this config saturated what monthly
+      cross-sectional signals can do here) rather than trying more features
+      one at a time.
+- [ ] Dollar volume / market-cap proxy as a size feature (not yet tried, mostly
+      overlaps with what illiq_amihud already captures) — low priority given
+      the pattern above.
+
+## Tier 7b — original price-only factors (before volume was available)
 
 - [x] `pth_52wk` (52-week-high proximity, George & Hwang 2004) — **discarded**
       (iteration 14, Sharpe 0.4725): hurt performance in this universe/period
