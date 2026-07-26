@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 quant_bot/cache/
 autoresearch/last_run.json
+paper_trading/state.json
+paper_trading/nav_log.csv
+paper_trading/live_prices.parquet
+paper_trading/run_daily.log
