@@ -55,7 +55,7 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
                   df_tickers: pd.DataFrame, cfg: StrategyConfig):
     """Returns (monthly_returns: list[float], turnovers: list[float], months: list[Period])."""
     price_df = price_df.sort_index()
-    months = pd.period_range(f"{cfg.start_year}-01", f"{cfg.end_year}-12", freq="M")
+    months = pd.period_range(f"{cfg.start_year}-01-01", f"{cfg.end_year}-12-31", freq=cfg.rebalance_freq)
 
     monthly_returns, turnovers, periods = [], [], []
     prev_weights = pd.Series(dtype=float)
@@ -77,10 +77,11 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
             & (features.index.get_level_values("date") < current_start)
             & (features.index.get_level_values("ticker").isin(tickers_for_month))
         )
+        period_end_exclusive = (period + 1).to_timestamp(how="start")
         month_dates = features.index.get_level_values("date")
         test_mask = (
             (month_dates >= current_start)
-            & (month_dates < current_start + pd.offsets.MonthEnd(1))
+            & (month_dates < period_end_exclusive)
             & (features.index.get_level_values("ticker").isin(tickers_for_month))
         )
         if train_mask.sum() < 100 or test_mask.sum() == 0:

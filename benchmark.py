@@ -30,7 +30,8 @@ def main():
     df_tickers = data.load_universe(cfg.train_window_years, cfg.start_year)
     volume_df = data.load_volume() if cfg.include_volume_features else None
     features, labels = get_features_and_labels(price_df, cfg.label_horizon_days,
-                                                volume_df, cfg.include_volume_features)
+                                                volume_df, cfg.include_volume_features,
+                                                cfg.rebalance_freq)
 
     monthly_returns, turnovers, periods = run_backtest(features, labels, price_df, df_tickers, cfg)
     if len(monthly_returns) == 0:
@@ -38,7 +39,8 @@ def main():
         print("ERROR: backtest produced zero months — harness or data problem", file=sys.stderr)
         sys.exit(1)
 
-    m = metrics.summarize(monthly_returns)
+    periods_per_year = {"W": 52, "M": 12, "Q": 4, "A": 1, "Y": 1}.get(cfg.rebalance_freq, 12)
+    m = metrics.summarize(monthly_returns, periods_per_year)
     bh_returns = buy_and_hold(price_df, df_tickers, cfg.start_year, cfg.end_year)
     bh = metrics.summarize(bh_returns)
 

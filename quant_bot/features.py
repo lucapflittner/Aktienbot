@@ -26,12 +26,15 @@ def _zscore(s: pd.Series) -> pd.Series:
 
 
 def engineer_features(price_df: pd.DataFrame, volume_df: pd.DataFrame = None,
-                       include_volume_features: bool = False) -> pd.DataFrame:
+                       include_volume_features: bool = False, resample_freq: str = "M") -> pd.DataFrame:
     """price_df: Date-indexed wide frame, one column per ticker (close prices).
     volume_df (optional): same shape, daily trading volume -- only used when
     include_volume_features is True, so passing it is harmless/inert by
     default (backward compatible with callers, incl. regression_check.py's
-    synthetic-price-only tests, that never pass volume at all)."""
+    synthetic-price-only tests, that never pass volume at all).
+    resample_freq: pandas period alias controlling how often a "row" exists per
+    ticker (W/M/Q/Y) -- must match quant_bot.config.StrategyConfig.rebalance_freq
+    for the rebalance cadence and this feature snapshot cadence to agree."""
     df = price_df.sort_index()
 
     r2y = df.pct_change(500, fill_method=None)
@@ -89,9 +92,9 @@ def engineer_features(price_df: pd.DataFrame, volume_df: pd.DataFrame = None,
     stacked.columns = ["date", "ticker"] + list(features.columns.get_level_values(0).unique())
     features = stacked.set_index(["date", "ticker"])
 
-    # first trading day of each month, per ticker
+    # first trading day of each period (week/month/quarter/year), per ticker
     stacked = features.reset_index().sort_values("date")
-    stacked["period"] = stacked["date"].dt.to_period("M")
+    stacked["period"] = stacked["date"].dt.to_period(resample_freq)
     monthly = stacked.groupby(["ticker", "period"], as_index=False).first()
     monthly = monthly.drop(columns=["period"]).set_index(["date", "ticker"]).sort_index()
 
@@ -114,14 +117,16 @@ def create_labels(price_df: pd.DataFrame, interval: int) -> pd.Series:
 
 
 def get_features_and_labels(price_df: pd.DataFrame, label_horizon_days: int,
-                             volume_df: pd.DataFrame = None, include_volume_features: bool = False):
+                             volume_df: pd.DataFrame = None, include_volume_features: bool = False,
+                             resample_freq: str = "M"):
     """engineer_features/create_labels are expensive (~30-60s over 884 tickers);
     cache the result keyed on this file's own source + the label horizon, so an
     autoresearch iteration that only changes the model/weighting reuses it."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(
         (Path(__file__).read_text() + str(label_horizon_days) + str(price_df.shape)
-         + str(include_volume_features) + str(volume_df.shape if volume_df is not None else "none")).encode()
+         + str(include_volume_features) + str(volume_df.shape if volume_df is not None else "none")
+         + str(resample_freq)).encode()
     ).hexdigest()[:16]
     feat_path = CACHE_DIR / f"features_{key}.parquet"
     label_path = CACHE_DIR / f"labels_{key}.parquet"
@@ -131,7 +136,7 @@ def get_features_and_labels(price_df: pd.DataFrame, label_horizon_days: int,
         labels = pd.read_parquet(label_path)["future_return"]
         return features, labels
 
-    features = engineer_features(price_df, volume_df, include_volume_features)
+    features = engineer_features(price_df, volume_df, include_volume_features, resample_freq)
     labels = create_labels(price_df, label_horizon_days)
     common = features.index.intersection(labels.index)
     features, labels = features.loc[common], labels.loc[common]
