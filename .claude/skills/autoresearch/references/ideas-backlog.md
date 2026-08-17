@@ -169,7 +169,12 @@ that differ hugely in volatility and correlation)
       the model family isn't the bottleneck holding back further gains.
 - [ ] LightGBM is still blocked: the conda env's install crashes with a native
       access violation even after a full uninstall+reinstall (tried twice).
-      CatBoost isn't installed. Neither has been fairly tested.
+- [x] CatBoost — **discarded** (iteration 43, first fair test after `pip install
+      catboost` succeeded cleanly): Sharpe 1.13 vs XGBoost's 1.56 baseline, and
+      slower (592s vs 374s per full backtest). Second model-family swap in a
+      row (after linear ElasticNet, iteration 31) to lose to XGBoost on this
+      dataset — reinforces that XGBoost's fit here isn't easily beaten by
+      swapping model family alone.
 - [ ] Bootstrap/purged walk-forward CV within each training window (instead
       of a single train/val split in `train_model`) to get a more robust
       hyperparameter choice before the monthly refit. Still untried.
