@@ -80,7 +80,14 @@ that differ hugely in volatility and correlation)
 - [x] Sweep `train_window_years` — 5 alone (vs old baseline) looked good in
       isolation (Sharpe 0.87) but **discarded in combination with the new
       label_horizon=42 baseline** (iteration 6, Sharpe 0.8341 < 1.1126) — doesn't
-      stack. 2 years still untried against the label_horizon=42 baseline.
+      stack. **2 years retested against the current weekly+top_n=5+cost-model
+      stack and is now a big keep** (iteration 45, Sharpe 1.5590->1.7157,
+      CAGR 71%->76%, also faster to backtest) — the same value that lost
+      against the old monthly baseline (iteration 26, Sharpe 0.9459) wins
+      against the newer stack. Reinforces that these interaction effects are
+      real and axes worth periodically retesting against whatever the current
+      baseline is, not permanently closed off from one earlier failed
+      combination.
 - [x] Ensemble of XGBoost seeds — **discarded** (iteration 10): identical to
       single-model baseline because `subsample`/`colsample_bytree` aren't
       configured, so `random_state` has zero effect — tree construction is fully
