@@ -11,7 +11,7 @@ from dataclasses import dataclass, asdict
 class StrategyConfig:
     start_year: int = 2018          # backtest evaluation window (fast, real, out-of-sample)
     end_year: int = 2026
-    train_window_years: int = 3     # rolling training window
+    train_window_years: int = 2     # rolling training window
     label_horizon_days: int = 10    # ~2 trading weeks forward return
     top_n: int = 5                  # basket size
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
