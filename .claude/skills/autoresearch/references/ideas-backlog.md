@@ -168,7 +168,15 @@ that differ hugely in volatility and correlation)
       modeling is adding real value over a linear model on these features, i.e.
       the model family isn't the bottleneck holding back further gains.
 - [ ] LightGBM is still blocked: the conda env's install crashes with a native
-      access violation even after a full uninstall+reinstall (tried twice).
+      access violation even after a full uninstall+reinstall (tried three
+      times now, including a fresh `pip install --force-reinstall` in this
+      session - identical `OSError: access violation reading 0x0...0` inside
+      `LGBM_DatasetSetField`, unrelated to the numpy/scipy versions that
+      reinstall churned - reverted those back to numpy==2.2.6 afterward since
+      it fixed nothing and only added dependency-conflict noise). This is a
+      genuine environment-level blocker on this specific machine, not a
+      one-off fluke - deprioritize further attempts unless someone tries it on
+      a different machine/OS.
 - [x] CatBoost — **discarded** (iteration 43, first fair test after `pip install
       catboost` succeeded cleanly): Sharpe 1.13 vs XGBoost's 1.56 baseline, and
       slower (592s vs 374s per full backtest). Second model-family swap in a
