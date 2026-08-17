@@ -183,9 +183,17 @@ that differ hugely in volatility and correlation)
       row (after linear ElasticNet, iteration 31) to lose to XGBoost on this
       dataset — reinforces that XGBoost's fit here isn't easily beaten by
       swapping model family alone.
-- [ ] Bootstrap/purged walk-forward CV within each training window (instead
-      of a single train/val split in `train_model`) to get a more robust
-      hyperparameter choice before the monthly refit. Still untried.
+- [x] Purged walk-forward CV within each training window (embargoed 80/20
+      train/val split, picks `model_max_depth` from {3,5,7} by cross-sectional
+      Spearman IC instead of using the fixed default) — **discarded**
+      (iteration 44, Sharpe 1.33 vs 1.56 baseline), and 3.2x slower per
+      backtest run (1197s vs 374s) since it fits 4x as many models per period.
+      The per-period validation slice is a relatively short, noisy sample
+      (~20% of a 3yr window, shrunk further by the label-horizon embargo) —
+      not enough signal to reliably out-pick a fixed, already-reasonable
+      max_depth=5. A more textbook version (proper k-fold, wider grid) might
+      behave differently but costs proportionally more; this specific
+      implementation isn't worth the added complexity or runtime.
 
 ## Tier 7 — new factors (2026 literature scan)
 
