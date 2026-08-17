@@ -87,7 +87,19 @@ that differ hugely in volatility and correlation)
       against the newer stack. Reinforces that these interaction effects are
       real and axes worth periodically retesting against whatever the current
       baseline is, not permanently closed off from one earlier failed
-      combination.
+      combination. **Pushed further to 1 year (iteration 46, keep, Sharpe
+      1.86) then 0.5 years/6 months (iteration 47, keep, Sharpe 2.40, CAGR
+      115%/yr)** — required a code change (backtest.py + paper_trading/engine.py
+      DateOffset switched from years to months so fractional windows work).
+      **STOP — do not push this axis shorter (3mo, 1mo etc).** Four
+      consecutive monotonic jumps from one shrinking parameter, landing on a
+      115%/yr CAGR claim, is the textbook signature of overfitting to a fixed,
+      repeatedly-reused 2018-2026 backtest window rather than a real,
+      structural finding — treat everything past the 1-year point as a strong
+      warning sign, not a straightforward win, regardless of what the tracked
+      Sharpe metric mechanically says. Cross-check hard against
+      `paper_trading`'s live forward-test result before ever trusting the
+      6-month config as more than a research curiosity.
 - [x] Ensemble of XGBoost seeds — **discarded** (iteration 10): identical to
       single-model baseline because `subsample`/`colsample_bytree` aren't
       configured, so `random_state` has zero effect — tree construction is fully
