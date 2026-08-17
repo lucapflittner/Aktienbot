@@ -93,7 +93,7 @@ def _rebalance_bot(cfg, features: pd.DataFrame, labels: pd.Series, prices: pd.Da
         return {"skipped": "no feature row for this period yet"}
     month_anchor = this_period_dates.min()
 
-    train_start = month_anchor - pd.DateOffset(years=cfg.train_window_years)
+    train_start = month_anchor - pd.DateOffset(months=round(cfg.train_window_years * 12))
     train_mask = (
         (feature_dates >= train_start)
         & (feature_dates < month_anchor)

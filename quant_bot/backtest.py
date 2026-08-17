@@ -71,7 +71,7 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
         if not tickers_for_month:
             continue
 
-        train_start = current_start - pd.DateOffset(years=cfg.train_window_years)
+        train_start = current_start - pd.DateOffset(months=round(cfg.train_window_years * 12))
         train_mask = (
             (features.index.get_level_values("date") >= train_start)
             & (features.index.get_level_values("date") < current_start)
