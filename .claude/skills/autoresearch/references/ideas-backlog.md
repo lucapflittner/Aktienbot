@@ -15,16 +15,25 @@ never on the table.
       1.06): worse than weekly, and only 6 periods — essentially
       statistically meaningless at n=6, don't trust a yearly-rebalance Sharpe
       from this backtest window regardless of what it says.
-- [ ] Not yet tried: daily rebalancing (data supports it mechanically, even
-      though true day-trading doesn't apply) — worth a data point, though
-      given quarterly/yearly went the "less frequent is worse" direction and
-      weekly beat monthly, the trend so far favors *more* frequent rebalancing
-      up to some point; daily would 5x the trade count vs weekly and its flat
-      EUR1/trade cost impact untested at that frequency.
-      **CAUTION per iteration 35's finding:** a 1.56 Sharpe / 70.7% CAGR
-      backtest result is unusually strong — before adopting a config this
-      aggressive as anything more than a research finding, see the paper_trading
-      forward test's actual results once enough time has passed.
+- [x] Daily (`rebalance_freq="D"`, `label_horizon_days=2`) — **catastrophic
+      discard** (iteration 39, Sharpe -0.48, CAGR -100%, wiped out capital).
+      The "more frequent is better" trend broke here: same failure mode as
+      iteration 30's rank-weighted book — 1659 daily periods vs weekly's 342
+      means ~5x more flat EUR1/trade fees compounding on the same 10k EUR
+      account, stacked with a much noisier 2-day-forward label giving the
+      model far less real signal. Also mechanically impractical regardless of
+      Sharpe: took ~90min vs weekly's 6min, since the walk-forward loop
+      retrains XGBoost fresh every single trading day — this architecture
+      doesn't scale to daily without engineering changes (periodic-only
+      refits) first. **Weekly is now confirmed as the local optimum on the
+      rebalance-frequency axis** — don't retry anything faster than weekly
+      without first changing the cost model (bigger account / pure-bps fees)
+      or the retrain cadence.
+      **CAUTION per iteration 35's finding (still applies):** a 1.56 Sharpe /
+      70.7% CAGR backtest result is unusually strong — before adopting a
+      config this aggressive as anything more than a research finding, see
+      the paper_trading forward test's actual results once enough time has
+      passed.
 
 # Idea backlog (SOTA-informed)
 
