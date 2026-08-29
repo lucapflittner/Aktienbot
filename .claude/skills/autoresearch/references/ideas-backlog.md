@@ -123,15 +123,34 @@ that differ hugely in volatility and correlation)
       configured, so `random_state` has zero effect — tree construction is fully
       deterministic. If retried, must first add row/column subsampling to create
       actual variance across seeds, otherwise it's a no-op by construction.
+      **Follow-up done 2026-08-29 (iteration 51, keep):** added
+      `model_subsample=0.8`/`model_colsample_bytree=0.8` (+ fixed
+      `random_state=0`) as a standalone regularizer (not yet the multi-seed
+      ensemble itself). Clear win on the new 2018-2023 research window
+      (Sharpe 1.5549->1.7256, MaxDD -31.3%->-26.2%) AND on the 2024-2026
+      holdout in the same direction (2.7465->2.9594) — the first change in
+      this project to improve two disjoint time windows from one real
+      anti-overfitting mechanism, rather than fitting one fixed window
+      harder. Still not live-validated. **Natural next step, now unblocked:**
+      re-attempt the multi-seed ensemble (iteration 10) now that subsampling
+      actually gives seeds something to disagree about.
 - [ ] LightGBM swap — **blocked, not actually tested**: this conda env's
       lightgbm 4.7.0 install crashes with a native access-violation even on a
       minimal standalone fit() outside project code (iteration 11/crash). Needs
       `pip install --force-reinstall lightgbm` or a conda-forge reinstall before
       this idea can be evaluated at all.
-- [ ] sklearn MLPRegressor swap — **not actually tested**: fails regression_check
-      (7/10) because MLPRegressor can't handle the NaNs XGBoost tolerates
-      natively (iteration 12/discard-regression). Would need a NaN imputer added
-      to the pipeline first (e.g. `SimpleImputer` before `StandardScaler`).
+- [x] sklearn MLPRegressor swap — **crash/impractical** (iteration 50,
+      2026-08-29): added the imputer this note asked for
+      (`SimpleImputer`+`StandardScaler`+`MLPRegressor` pipeline), regression
+      gate passed (14/14), but `benchmark.py` exceeded 10 minutes (>4x the
+      ~159s XGBoost baseline) and was killed before producing a Sharpe.
+      Retraining a fresh MLP 260 times (once per weekly period) is simply too
+      slow at this cadence, same failure mode as CatBoost's slowdown
+      (iteration 43) but much worse. Only retry with a materially cheaper
+      config (single hidden layer, `max_iter<=100`) or an architecture change
+      (fit once, reuse across periods) — no evidence yet it's worth that
+      engineering effort given XGBoost+regularization (iteration 51) is
+      currently winning on both speed and Sharpe.
 
 ## Tier 4 — universe / selection
 
