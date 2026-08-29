@@ -24,6 +24,8 @@ class StrategyConfig:
     model_n_estimators: int = 300
     model_max_depth: int = 5
     model_learning_rate: float = 0.1
+    model_subsample: float = 0.8        # row subsampling per tree (1.0 = off, XGBoost default)
+    model_colsample_bytree: float = 0.8  # feature subsampling per tree (1.0 = off, XGBoost default)
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
     include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
     rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)

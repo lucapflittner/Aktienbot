@@ -38,7 +38,8 @@ def train_model(X: pd.DataFrame, y: pd.Series, cfg: StrategyConfig):
     model = XGBRegressor(
         n_estimators=cfg.model_n_estimators, max_depth=cfg.model_max_depth,
         learning_rate=cfg.model_learning_rate, objective="reg:squarederror",
-        n_jobs=-1, verbosity=0,
+        subsample=cfg.model_subsample, colsample_bytree=cfg.model_colsample_bytree,
+        random_state=0, n_jobs=-1, verbosity=0,
     )
     model.fit(X, y)
     return model
