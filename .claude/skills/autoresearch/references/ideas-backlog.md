@@ -64,6 +64,23 @@ that differ hugely in volatility and correlation)
       variants of vol-targeting have now failed — deprioritize this whole tier
       unless a fundamentally different implementation is proposed (e.g. targeting
       *downside* vol only, not full vol).
+      **2026-08-30 update (iteration 57): downside-only variant tried, and it's
+      instructive rather than a clean win or loss.** Added `vol_target_downside_only`
+      (semi-deviation of down-days only, so up-day volatility no longer triggers
+      delevering) against the then-current baseline (Sharpe 2.2406). Research
+      window looked compelling: Sharpe 2.4092, MaxDD nearly halved (-28.5%->-14.3%),
+      annual_vol way down (34.8%->19.5%) - a real risk-reduction result, not noise.
+      But the 2024-2026 holdout check DISAGREED IN DIRECTION: Sharpe fell
+      3.2398->2.6803 (every other keep this session at least agreed in direction
+      between research and holdout). Discarded specifically because of that
+      divergence - the harness's own new rule ("holdout diverges sharply either
+      direction -> lean conservative") worked exactly as designed here. Likely
+      explanation: the holdout window is a stronger bull market with presumably
+      fewer real drawdown events to insure against, so the overlay's up-day
+      exposure-dimming cost more than its crash protection saved there. **Not
+      necessarily a dead end** - a downside-vol overlay that only engages when
+      recent realized downside vol is unusually elevated (vs. always targeting a
+      fixed level) might avoid taxing calm bull stretches; untried.
 
 ## Tier 3 — model / label
 
