@@ -21,9 +21,9 @@ class StrategyConfig:
     spread_bps: float = 7.5          # bid-ask spread cost charged on turnover, in basis points
     capital_eur: float = 10_000.0   # assumed account size, for sizing the flat per-trade fee below
     flat_fee_per_trade_eur: float = 1.0  # fixed broker fee per buy or sell order (not per round-trip)
-    model_n_estimators: int = 300
+    model_n_estimators: int = 600
     model_max_depth: int = 7
-    model_learning_rate: float = 0.1
+    model_learning_rate: float = 0.05
     model_subsample: float = 0.8        # row subsampling per tree (1.0 = off, XGBoost default)
     model_colsample_bytree: float = 0.8  # feature subsampling per tree (1.0 = off, XGBoost default)
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
