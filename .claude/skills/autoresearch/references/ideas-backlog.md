@@ -100,6 +100,24 @@ that differ hugely in volatility and correlation)
       Sharpe metric mechanically says. Cross-check hard against
       `paper_trading`'s live forward-test result before ever trusting the
       6-month config as more than a research curiosity.
+      **2026-08-29: cross-check came back and it's decisive — REVERTED
+      (iteration 48).** `paper_trading` ran the 0.5yr config for its entire
+      history so far (inception 2026-07-24 through 2026-08-28, 26 trading
+      days / 6 rebalances): bot -15.1% cumulative vs. benchmark (equal-weight
+      buy&hold) +4.5% cumulative, a ~19.5pp gap with a steady bleed across
+      nearly every rebalance, not one bad day. The backtest's 115%/yr CAGR /
+      2.40 Sharpe claim did not survive contact with genuinely new data —
+      confirms this was overfitting, not real alpha. Rolled back to
+      `train_window_years=1.0` (iteration 46's value, the last point on this
+      axis before the run of increasingly-extreme, increasingly-suspicious
+      jumps). **1.0 and 2.0 (iterations 45-46) have NOT been independently
+      live-validated yet** — they sit on the same monotonic-improvement curve
+      that turned out to be misleading at the 0.5yr extreme, so treat them as
+      innocent-until-shown-guilty rather than fully trusted; `paper_trading`
+      continues forward from here (state/nav_log were not reset) and its
+      next several weeks under the reverted config are the actual test.
+      Do not re-propose train_window_years<1.0 without new live evidence
+      supporting it.
 - [x] Ensemble of XGBoost seeds — **discarded** (iteration 10): identical to
       single-model baseline because `subsample`/`colsample_bytree` aren't
       configured, so `random_state` has zero effect — tree construction is fully
