@@ -9,8 +9,9 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class StrategyConfig:
-    start_year: int = 2018          # backtest evaluation window (fast, real, out-of-sample)
-    end_year: int = 2026
+    start_year: int = 2018          # research window (autoresearch iterates against this only)
+    end_year: int = 2023             # 2024-2026 is a locked holdout, see holdout_check.py -
+                                      # never widen this to peek at holdout data mid-experiment
     train_window_years: float = 1.0  # rolling training window (fractional years allowed; converted to months internally)
     label_horizon_days: int = 10    # ~2 trading weeks forward return
     top_n: int = 5                  # basket size

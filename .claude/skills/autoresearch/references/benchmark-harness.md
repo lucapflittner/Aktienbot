@@ -39,6 +39,36 @@ prefixed `harness:` — never bundle a harness edit with a strategy
 experiment, or you can't tell whether a metric change came from the strategy
 or from redefining the ruler.
 
+## Locked holdout (added 2026-08-29, after iteration 48)
+
+`benchmark.py` only ever measures `DEFAULT_CONFIG.start_year`-`end_year`,
+which every iteration in `results.tsv` has been free to run against — by
+iteration 47 the same 2018-2026 window had been reused across ~10
+experiments in one session, and the config that won hardest there
+(`train_window_years=0.5`, Sharpe 2.40 in-sample) went on to lose money in
+`paper_trading`'s live forward test. Classic data-snooping: repeatedly
+selecting the best config against a fixed evaluation set eventually fits
+noise in that set, not real structure.
+
+Fix: `DEFAULT_CONFIG.end_year` is now 2023. Every `benchmark.py` run —
+i.e. every iteration's keep/discard decision — only ever sees 2018-2023.
+2024-2026 is checked *only* via `holdout_check.py`, a separate read-only
+script (same status as `benchmark.py`: don't edit it inside a strategy
+experiment). Run it sparingly — before trusting a big keep, or every ~10
+iterations as an audit, never every iteration — because checking it
+constantly would just turn it into a second research window and recreate
+the same problem one level up. If a config's holdout Sharpe diverges
+sharply (either direction) from its research Sharpe, don't tune toward
+the holdout number — treat the divergence itself as the finding, and lean
+toward the simpler/more conservative config.
+
+**Comparability note:** iterations 0-48's logged Sharpe values were all
+measured on the old 2018-2026 window and are NOT comparable to anything
+measured after this change. `results.tsv` row "harness" (right after
+iteration 48) re-measured the then-current config against the new
+2018-2023 window (Sharpe 1.5549) — that is the `sharpe_prev_kept`
+reference iteration 50 onward, not iteration 48's 1.8606.
+
 ## Baseline (Phase C — already captured)
 
 `autoresearch/results.tsv` iteration 0: Sharpe 0.6515, CAGR 16.5%, MaxDD

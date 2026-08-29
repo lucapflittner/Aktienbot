@@ -12,12 +12,21 @@ wires that pattern to a walk-forward equity portfolio backtest instead of
 nanoGPT training.
 
 **Goal on file:** maximize `metric` = annualized Sharpe ratio of
-`quant_bot/config.py`'s `DEFAULT_CONFIG`, long-only, monthly rebalance, net
-of transaction costs, backtested 2018-2026 on real S&P 500 data — without
+`quant_bot/config.py`'s `DEFAULT_CONFIG`, long-only, weekly rebalance, net
+of transaction costs, backtested 2018-2023 on real S&P 500 data — without
 the regression suite dropping below baseline. This is the default; if the
 user gives a different goal (e.g. "minimize max drawdown", "maximize CAGR
 subject to vol < 15%"), re-target `benchmark.py`'s printed `metric:` line
 accordingly (it's a single `print` statement) and proceed with the same loop.
+
+**2018-2023 is a research window, not the full corpus.** 2024-2026 is a
+locked holdout (`holdout_check.py`) that iteration never touches — see
+[[benchmark-harness]] "Locked holdout" section for why (iteration 47's
+train_window_years=0.5 hit Sharpe 2.40 in-sample on the full 2018-2026
+window and then lost money live in `paper_trading`, the textbook overfitting
+failure this split exists to catch earlier next time). Never widen
+`start_year`/`end_year` back toward 2026 to "get more data" for an
+experiment — that reopens the exact hole this closed.
 
 ## The four project files that make this work
 
