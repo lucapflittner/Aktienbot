@@ -34,6 +34,33 @@ never on the table.
       config this aggressive as anything more than a research finding, see
       the paper_trading forward test's actual results once enough time has
       passed.
+- [x] **2026-10-04 update: retrain/rebalance decoupling added, then
+      higher-than-weekly frequency retried and re-confirmed closed.**
+      Iteration 58 added a `retrain_freq` config knob (default `None` = old
+      behavior, verified bit-identical) so the model can be retrained on a
+      coarser cadence (e.g. monthly) while rebalancing/re-scoring happens on a
+      finer one — this was meant to fix iteration 39's *mechanical* blocker
+      (daily retraining took ~90min). It worked for that narrow purpose
+      (iteration 59's 3D-rebalance/monthly-retrain run finished in ~10min, no
+      runtime blowup) but did NOT fix the *economics*: iteration 59
+      (`rebalance_freq="3D"` ~twice/week, `retrain_freq="M"`, top_n=5) was
+      catastrophic, Sharpe -2.0055, capital wiped out — worse than iteration
+      39's daily failure. Iteration 60 tried the user-suggested mitigation
+      (widen `top_n` 5→10 to dilute noise-driven turnover) on top of the same
+      3D/monthly setup and it blew past the runtime budget again (unclear if
+      Sharpe would even have been better — never got a result, logged as
+      crash) — widening top_n didn't fix the fundamental runtime/overhead
+      problem of running the per-period loop (feature/universe
+      lookup/turnover bookkeeping, not just the XGBoost fit) ~100x/year
+      instead of ~50x/year. **Conclusion: this axis is now closed a second,
+      independent way** — even with retrain decoupled from rebalance (so the
+      expensive part isn't repeated), the flat EUR1/trade fee economics at
+      EUR10k capital and the short (10-day) label horizon's lack of
+      3-day-granularity signal make anything faster than weekly a loser on
+      this dataset. Don't retry without first changing the cost model
+      (larger account / pure-bps-only fees, no flat fee) or giving the model
+      a genuinely different, finer-than-weekly-native signal (not just
+      re-scoring a weekly/monthly-trained model more often).
 
 # Idea backlog (SOTA-informed)
 
@@ -81,6 +108,33 @@ that differ hugely in volatility and correlation)
       necessarily a dead end** - a downside-vol overlay that only engages when
       recent realized downside vol is unusually elevated (vs. always targeting a
       fixed level) might avoid taxing calm bull stretches; untried.
+      **2026-10-04 update (iterations 63-64): the elevated-only variant was
+      tried, and the same failure pattern recurred, just milder.** Added
+      `conditional_downside_vol_scale` (`weighting.py`): downside-only
+      semi-deviation vol targeting that only engages when the current rolling
+      downside vol exceeds its own trailing-252-day 80th percentile (vs
+      iteration 57's always-on trigger). Research window result looked even
+      better than iteration 57's: Sharpe 2.2406->2.5886 (+15.5% relative),
+      MaxDD nearly halved (-28.5%->-16.4%), annual_vol down sharply
+      (34.8%->23.9%) - mechanically a clear keep, initially logged as one
+      (iteration 63). But the holdout check (run per the "before trusting a
+      big keep" rule, especially given this exact lever's history) again
+      disagreed in direction: holdout Sharpe fell 3.2398->3.0163 (-6.9%
+      relative) even though research improved - milder than iteration 57's
+      -17.3% flip, but the same qualitative red flag (direction disagreement,
+      not just magnitude mismatch). Rolled back (iteration 64,
+      `discard-holdout`) for consistency with the iteration 57 precedent -
+      gating on "unusually elevated" downside vol reduced but did not
+      eliminate the bull-market tax; the 2024-2026 holdout apparently still
+      has enough qualifying elevated-vol trigger events to cost more than
+      they save, even in a stronger bull market than the research window.
+      **This closes vol-targeting as a tier for this project**: four
+      structurally distinct implementations now tried (full-vol always-on x2,
+      downside-only always-on, downside-only elevated-gated) and all four
+      either hurt the research window outright or flipped direction on
+      holdout. Don't revisit without a fundamentally different trigger signal
+      (e.g. a real external market-stress indicator, not any function of the
+      basket's own trailing realized returns).
 
 ## Tier 3 — model / label
 
@@ -151,6 +205,23 @@ that differ hugely in volatility and correlation)
       harder. Still not live-validated. **Natural next step, now unblocked:**
       re-attempt the multi-seed ensemble (iteration 10) now that subsampling
       actually gives seeds something to disagree about.
+      **2026-10-04 update: multi-seed ensemble retried (iteration 52,
+      `model_n_seeds=3`) and discarded** — essentially flat vs single-model
+      (1.7245 vs 1.7256) but 2.6x slower; the single regularized model had
+      already captured the available variance-reduction benefit. Also swept
+      further on this axis: `model_subsample` 0.8->0.6 (iteration 65,
+      discarded, Sharpe 1.7527, notably worse, deeper MaxDD) — 0.8 is a local
+      optimum, don't push subsampling more aggressive. `min_child_weight`
+      added as a new knob and swept 1(implicit default)->2->5 (iterations
+      61-62, both discarded, Sharpe 2.0993 and 2.0086 respectively, worse the
+      higher it went) — XGBoost's default of 1 is already best here, this
+      axis is now closed, don't retry positive values. `gamma` was wired
+      alongside `min_child_weight` in iteration 61 but never swept
+      independently before the whole commit was rolled back (both knobs are
+      currently NOT present in `backtest.py`/`config.py` — would need
+      re-adding) — gamma alone (vs. the min_child_weight bump that may have
+      been the actual culprit) remains untried if someone wants to pick this
+      back up.
 - [ ] LightGBM swap — **blocked, not actually tested**: this conda env's
       lightgbm 4.7.0 install crashes with a native access-violation even on a
       minimal standalone fit() outside project code (iteration 11/crash). Needs
