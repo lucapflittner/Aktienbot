@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from quant_bot.backtest import train_model
+from quant_bot.backtest import train_model, select_top_n_with_corr_cap
 from quant_bot.config import DEFAULT_CONFIG
 from quant_bot.features import engineer_features, create_labels
 from quant_bot.weighting import SCHEMES
@@ -110,13 +110,22 @@ def _rebalance_bot(cfg, features: pd.DataFrame, labels: pd.Series, prices: pd.Da
     model = train_model(X_train, y_train, cfg)
     preds = model.predict(X_test)
     order = np.argsort(preds)[::-1]
-    ranked_tickers = X_test.index.get_level_values("ticker")[order]
-    top_n_tickers = list(dict.fromkeys(ranked_tickers))[: cfg.top_n]
+    ranked_tickers = list(dict.fromkeys(X_test.index.get_level_values("ticker")[order]))
+
+    # --- trailing daily returns up to (not including) D; reused for both the
+    # optional correlation-cap selection below and inverse_vol/HRP sizing,
+    # identical window to quant_bot.backtest.run_backtest's hist_returns ---
+    hist_window = prices.loc[:D].tail(127)
+    hist_returns = hist_window.pct_change(fill_method=None).dropna(how="all")
+
+    if cfg.model_corr_cap is not None:
+        top_n_tickers = select_top_n_with_corr_cap(ranked_tickers, hist_returns,
+                                                     cfg.top_n, cfg.model_corr_cap)
+    else:
+        top_n_tickers = ranked_tickers[:cfg.top_n]
     if not top_n_tickers:
         return {"skipped": "no valid picks"}
 
-    hist_window = prices.loc[:D].tail(127)
-    hist_returns = hist_window.pct_change(fill_method=None).dropna(how="all")
     weight_fn = SCHEMES[cfg.weighting]
     target_weights = weight_fn(hist_returns, top_n_tickers)
 

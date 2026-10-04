@@ -15,6 +15,12 @@ class StrategyConfig:
     train_window_years: float = 1.0  # rolling training window (fractional years allowed; converted to months internally)
     label_horizon_days: int = 10    # ~2 trading weeks forward return
     top_n: int = 5                  # basket size
+    model_corr_cap: float = 0.7      # None disables the greedy correlation cap during top-N
+                                      # selection; else a pairwise trailing-return correlation
+                                      # threshold (e.g. 0.7) - a ranked candidate is skipped if
+                                      # its correlation to any already-accepted name exceeds this,
+                                      # to avoid the top-N basket crowding into one correlated
+                                      # sector/factor bet (see ideas-backlog.md Tier 4)
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63

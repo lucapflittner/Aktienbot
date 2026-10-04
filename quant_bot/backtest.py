@@ -45,6 +45,52 @@ def train_model(X: pd.DataFrame, y: pd.Series, cfg: StrategyConfig):
     return model
 
 
+def select_top_n_with_corr_cap(ranked_tickers: list, hist_returns: pd.DataFrame,
+                                top_n: int, corr_cap: float) -> list:
+    """Greedily build a top_n basket from a predicted-return-ranked candidate
+    list: walk down the ranking and accept a candidate unless its trailing
+    return correlation (over the SAME point-in-time hist_returns window used
+    for inverse_vol/HRP weighting) to any name already accepted exceeds
+    corr_cap, in which case skip it and move to the next candidate. This
+    changes WHICH names get picked (unlike HRP/inverse_vol, which only decide
+    sizing after the basket is already fixed), aiming to stop the basket from
+    concentrating in one correlated sector/factor move.
+
+    Edge case: if the ranked list is exhausted before top_n slots are filled
+    (every remaining candidate was too correlated to something already
+    picked), relax the cap and backfill with the next-best skipped
+    candidates rather than returning a smaller-than-top_n basket.
+    """
+    candidates = [t for t in ranked_tickers if t in hist_returns.columns]
+    corr = hist_returns[candidates].corr() if candidates else pd.DataFrame()
+
+    selected, skipped = [], []
+    for t in ranked_tickers:
+        if len(selected) >= top_n:
+            break
+        if t not in corr.columns:
+            # no usable return history for this ticker (e.g. new listing) --
+            # can't evaluate its correlation, so accept it directly.
+            selected.append(t)
+            continue
+        too_correlated = any(
+            pd.notna(corr.loc[t, s]) and corr.loc[t, s] > corr_cap
+            for s in selected if s in corr.columns
+        )
+        if too_correlated:
+            skipped.append(t)
+        else:
+            selected.append(t)
+
+    if len(selected) < top_n:
+        for t in skipped:
+            if len(selected) >= top_n:
+                break
+            selected.append(t)
+
+    return selected[:top_n]
+
+
 def _select_universe(df_tickers: pd.DataFrame, year: int, month: int):
     mask = (df_tickers["date"].dt.year == year) & (df_tickers["date"].dt.month == month)
     if mask.sum() == 0:
@@ -115,13 +161,21 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
 
         order = np.argsort(preds)[::-1]
         ordered_tickers = X_test.index.get_level_values("ticker")[order]
-        top_n_tickers = list(dict.fromkeys(ordered_tickers))[:cfg.top_n]
+        ranked_tickers = list(dict.fromkeys(ordered_tickers))
+
+        # --- trailing daily returns up to (not including) current_start; reused for
+        # both the optional correlation-cap selection below and inverse_vol/HRP sizing ---
+        hist_window = price_df.loc[:current_start].tail(126 + 1)
+        hist_returns = hist_window.pct_change(fill_method=None).dropna(how="all")
+
+        if cfg.model_corr_cap is not None:
+            top_n_tickers = select_top_n_with_corr_cap(ranked_tickers, hist_returns,
+                                                         cfg.top_n, cfg.model_corr_cap)
+        else:
+            top_n_tickers = ranked_tickers[:cfg.top_n]
         if len(top_n_tickers) == 0:
             continue
 
-        # --- position sizing on trailing daily returns up to (not including) current_start ---
-        hist_window = price_df.loc[:current_start].tail(126 + 1)
-        hist_returns = hist_window.pct_change(fill_method=None).dropna(how="all")
         weight_fn = SCHEMES[cfg.weighting]
         weights = weight_fn(hist_returns, top_n_tickers)
 
