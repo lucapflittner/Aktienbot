@@ -8,6 +8,7 @@ reference line for context.
 Usage: python benchmark.py
 """
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,22 @@ from quant_bot.config import DEFAULT_CONFIG
 from quant_bot.features import get_features_and_labels
 
 RESULTS_DIR = Path(__file__).resolve().parent / "autoresearch"
+
+
+def _periods_per_year(freq: str) -> float:
+    """Annualization factor for metrics.summarize. Covers the original calendar
+    aliases (W/M/Q/A/Y) plus arbitrary fixed-N-calendar-day periods (e.g. "3D",
+    "4D") needed to test rebalance cadences between weekly and daily -- those
+    aren't in the original hardcoded dict so would have silently annualized as
+    if monthly (factor 12) without this."""
+    hardcoded = {"W": 52, "M": 12, "Q": 4, "A": 1, "Y": 1}
+    if freq in hardcoded:
+        return hardcoded[freq]
+    match = re.fullmatch(r"(\d*)D", freq)
+    if match:
+        n = int(match.group(1)) if match.group(1) else 1
+        return 365.25 / n
+    return 12
 
 
 def main():
@@ -39,7 +56,7 @@ def main():
         print("ERROR: backtest produced zero months — harness or data problem", file=sys.stderr)
         sys.exit(1)
 
-    periods_per_year = {"W": 52, "M": 12, "Q": 4, "A": 1, "Y": 1}.get(cfg.rebalance_freq, 12)
+    periods_per_year = _periods_per_year(cfg.rebalance_freq)
     m = metrics.summarize(monthly_returns, periods_per_year)
     bh_returns = buy_and_hold(price_df, df_tickers, cfg.start_year, cfg.end_year)
     bh = metrics.summarize(bh_returns)
