@@ -255,6 +255,51 @@ that differ hugely in volatility and correlation)
       `features.py` (e.g. earnings-quality proxy, debt/equity if a
       fundamentals source is added later) — momentum-only cross-sections can
       crowd into the same crash-prone names.
+- [x] Greedy correlation cap during top-N selection (`quant_bot.backtest
+      .select_top_n_with_corr_cap`, wired into both `backtest.py`'s
+      `run_backtest` and `paper_trading/engine.py`'s `_rebalance_bot` via the
+      new `model_corr_cap` config knob) — **kept**, resolving the exact
+      "crowd into the same crash-prone names" risk flagged in the item above.
+      Prompted by the live forward-test's first 10 weeks concentrating almost
+      entirely in correlated semiconductor/memory names (MU, SNDK, WDC, INTC,
+      LRCX, KLAC, AMAT) during a volatile sub-sector swing — a concentrated
+      correlated-sector bet dressed up as a "diversified top-5", not a bug in
+      the ranking model itself. Structurally distinct from HRP/inverse_vol
+      (weighting.py): those only re-size an already-fixed basket; this changes
+      WHICH names get selected in the first place, by walking the
+      predicted-return ranking greedily and skipping a candidate whenever its
+      trailing correlation (same point-in-time 126d window already used for
+      inverse_vol/HRP) to an already-accepted name exceeds the threshold,
+      relaxing to backfill if the ranked list runs out before filling top_n.
+      Threshold sweep against the depth=7/lr=0.05/n_estimators=600 baseline
+      (Sharpe 2.2406): 0.5 → Sharpe 2.4743 (**best**, CAGR 0.8261, MaxDD
+      -0.2139, annual_vol dropped to 0.2580) · 0.7 → Sharpe 2.4014 (CAGR
+      1.0470, MaxDD -0.1863, the single best MaxDD of the three) · 0.85 →
+      Sharpe 2.2516 (**discard**, essentially a no-op — most correlated pairs
+      in this universe fall well under 0.85, so the filter rarely binds).
+      Monotonic: looser threshold → smaller effect → converges back to the
+      no-cap baseline, confirming the mechanism only helps when strict enough
+      to actually trigger. A diagnostic side-check (scratch script, not in the
+      repo) confirmed the mechanism does what it's meant to: avg pairwise
+      correlation within the selected basket fell 0.3007→0.2649 and the
+      consecutive-period ticker repeat rate fell 0.1876→0.1714 at threshold
+      0.7 — real, measurable de-concentration, not just a Sharpe-number
+      coincidence. **Holdout note (2024-2026, informational only):** the two
+      kept thresholds disagreed with each other on direction vs their
+      research-window gains — 0.5 agreed (holdout Sharpe 3.2398→3.3474,
+      +3.3%, proportionate to research's +3.0%) but 0.7 diverged (holdout
+      3.2398→2.7887, -13.9%, opposite direction from research's +7.2%), the
+      same divergence pattern that sank both vol-targeting attempts
+      (iterations 57, 64). Plausible read: 0.7's milder filtering still let
+      enough of the correlated cluster back in to behave inconsistently
+      across the research window's weaker-bull vs holdout's stronger-bull
+      regime, while 0.5's stricter filtering forced genuinely different,
+      more consistently-behaving picks in both. **model_corr_cap=0.5 is the
+      current kept/default value**; 0.7 remains logged as a keep by the
+      mechanical research-window rule but should be considered the shakier
+      of the two if this axis is revisited. Live `paper_trading` evidence
+      (not yet available at the time of this experiment) remains the real
+      test, same as every other keep in this project's history.
 - [x] Regime filter (equal-weighted universe proxy vs its 200d SMA,
       halve exposure below trend) — **discarded** (iteration 9, Sharpe 0.4826):
       the proxy is noisy/whipsaw-prone, hurt both Sharpe and max drawdown. A
