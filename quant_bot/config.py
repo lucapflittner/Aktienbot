@@ -29,6 +29,12 @@ class StrategyConfig:
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
     include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
     rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)
+    retrain_freq: str = None        # None -> retrain every rebalance period (old behavior, backward compatible).
+                                      # Else a pandas period alias (e.g. "M") coarser than rebalance_freq: the
+                                      # model is only refit when the rebalance period crosses into a new bucket
+                                      # of this frequency; in between, the existing model re-scores fresh
+                                      # features each rebalance so stock picks/weights can still update without
+                                      # paying XGBoost's full retrain cost every period.
 
     def as_dict(self):
         return asdict(self)

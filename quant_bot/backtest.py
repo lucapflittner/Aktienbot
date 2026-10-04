@@ -61,6 +61,9 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
     monthly_returns, turnovers, periods = [], [], []
     prev_weights = pd.Series(dtype=float)
     capital = cfg.capital_eur
+    model = None
+    last_retrain_bucket = None
+    retrain_freq = cfg.retrain_freq or cfg.rebalance_freq
 
     for period in months:
         current_start = period.to_timestamp(how="start")
@@ -72,12 +75,6 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
         if not tickers_for_month:
             continue
 
-        train_start = current_start - pd.DateOffset(months=round(cfg.train_window_years * 12))
-        train_mask = (
-            (features.index.get_level_values("date") >= train_start)
-            & (features.index.get_level_values("date") < current_start)
-            & (features.index.get_level_values("ticker").isin(tickers_for_month))
-        )
         period_end_exclusive = (period + 1).to_timestamp(how="start")
         month_dates = features.index.get_level_values("date")
         test_mask = (
@@ -85,14 +82,33 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
             & (month_dates < period_end_exclusive)
             & (features.index.get_level_values("ticker").isin(tickers_for_month))
         )
-        if train_mask.sum() < 100 or test_mask.sum() == 0:
+        if test_mask.sum() == 0:
             continue
-
-        X_train, y_train = features[train_mask], labels.reindex(features[train_mask].index)
         X_test = features[test_mask]
 
+        # retrain only when crossing into a new retrain_freq bucket (identical to
+        # retraining every period when retrain_freq is None/== rebalance_freq);
+        # otherwise reuse the existing model and just re-score this period's
+        # fresh features, so a finer rebalance_freq doesn't force a full refit.
+        retrain_bucket = current_start.to_period(retrain_freq)
+        need_retrain = model is None or retrain_bucket != last_retrain_bucket
+        if need_retrain:
+            train_start = current_start - pd.DateOffset(months=round(cfg.train_window_years * 12))
+            train_mask = (
+                (features.index.get_level_values("date") >= train_start)
+                & (features.index.get_level_values("date") < current_start)
+                & (features.index.get_level_values("ticker").isin(tickers_for_month))
+            )
+            if train_mask.sum() < 100:
+                continue
+            X_train, y_train = features[train_mask], labels.reindex(features[train_mask].index)
+            try:
+                model = train_model(X_train, y_train, cfg)
+            except ValueError:
+                continue
+            last_retrain_bucket = retrain_bucket
+
         try:
-            model = train_model(X_train, y_train, cfg)
             preds = model.predict(X_test)
         except ValueError:
             continue
