@@ -46,9 +46,15 @@ def main():
     price_df = data.load_prices()
     df_tickers = data.load_universe(cfg.train_window_years, cfg.start_year)
     volume_df = data.load_volume() if cfg.include_volume_features else None
+    # run_backtest iterates on the check grid (cfg.check_freq when set, else
+    # the rebalance grid), so feature rows and annualization both have to
+    # follow that same cadence -- not rebalance_freq, which with check_freq
+    # set is only the coarsest cadence at which a trade may happen, not how
+    # often a return is booked. Identical to the old behavior when unset.
+    effective_freq = cfg.check_freq or cfg.rebalance_freq
     features, labels = get_features_and_labels(price_df, cfg.label_horizon_days,
                                                 volume_df, cfg.include_volume_features,
-                                                cfg.rebalance_freq)
+                                                effective_freq)
 
     monthly_returns, turnovers, periods = run_backtest(features, labels, price_df, df_tickers, cfg)
     if len(monthly_returns) == 0:
@@ -56,7 +62,7 @@ def main():
         print("ERROR: backtest produced zero months — harness or data problem", file=sys.stderr)
         sys.exit(1)
 
-    periods_per_year = _periods_per_year(cfg.rebalance_freq)
+    periods_per_year = _periods_per_year(effective_freq)
     m = metrics.summarize(monthly_returns, periods_per_year)
     bh_returns = buy_and_hold(price_df, df_tickers, cfg.start_year, cfg.end_year)
     bh = metrics.summarize(bh_returns)
