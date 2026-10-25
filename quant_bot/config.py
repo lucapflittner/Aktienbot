@@ -35,6 +35,25 @@ class StrategyConfig:
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
     include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
     rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)
+    check_freq: str = None          # None -> evaluate (and therefore trade) exactly on the
+                                      # rebalance_freq grid, i.e. the old purely calendar-driven
+                                      # behavior. Else a pandas period alias FINER than
+                                      # rebalance_freq (e.g. "3D"): the model re-scores the
+                                      # cross-section this often, but an actual trade only happens
+                                      # when rebalance_gain_threshold below says it pays for itself.
+                                      # Decouples "how often we LOOK" from "how often we TRADE" --
+                                      # iterations 39/59/60 only ever tested the coupled version
+                                      # (every higher-frequency period forced a full ~170% basket
+                                      # turnover), which is what made them catastrophic.
+    rebalance_gain_threshold: float = None  # None -> trade at every period unconditionally (old
+                                      # behavior). Else: only trade when the model's predicted
+                                      # return advantage of the proposed basket over the currently
+                                      # held one exceeds this multiple of that round's estimated
+                                      # transaction cost. 1.0 = "the expected edge must at least
+                                      # cover its own costs"; >1 demands a margin of safety, which
+                                      # is the honest setting here -- the predicted edge is a noisy
+                                      # label_horizon_days-forward estimate being weighed against
+                                      # an immediate and certain cost.
     retrain_freq: str = None        # None -> retrain every rebalance period (old behavior, backward compatible).
                                       # Else a pandas period alias (e.g. "M") coarser than rebalance_freq: the
                                       # model is only refit when the rebalance period crosses into a new bucket

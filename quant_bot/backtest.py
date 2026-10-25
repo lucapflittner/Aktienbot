@@ -102,7 +102,13 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
                   df_tickers: pd.DataFrame, cfg: StrategyConfig):
     """Returns (monthly_returns: list[float], turnovers: list[float], months: list[Period])."""
     price_df = price_df.sort_index()
-    months = pd.period_range(f"{cfg.start_year}-01-01", f"{cfg.end_year}-12-31", freq=cfg.rebalance_freq)
+    # The loop runs on the *check* grid, which is the rebalance grid unless
+    # cfg.check_freq explicitly makes it finer. Whether a given check actually
+    # results in a trade is decided by the gain gate further down; with
+    # check_freq unset and no gate, every check trades and this is identical
+    # to the original purely calendar-driven loop.
+    check_freq = cfg.check_freq or cfg.rebalance_freq
+    months = pd.period_range(f"{cfg.start_year}-01-01", f"{cfg.end_year}-12-31", freq=check_freq)
 
     monthly_returns, turnovers, periods = [], [], []
     prev_weights = pd.Series(dtype=float)
@@ -179,30 +185,71 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
         weight_fn = SCHEMES[cfg.weighting]
         weights = weight_fn(hist_returns, top_n_tickers)
 
-        # --- turnover vs previous month's basket, for transaction costs ---
+        # --- turnover vs previous period's basket, for transaction costs ---
         all_names = weights.index.union(prev_weights.index)
         weight_deltas = (weights.reindex(all_names, fill_value=0.0)
                           - prev_weights.reindex(all_names, fill_value=0.0))
         turnover = float(weight_deltas.abs().sum())
         num_trades = int((weight_deltas.abs() > 1e-6).sum())
-        turnovers.append(turnover)
-        prev_weights = weights
 
-        # --- realized return over the holding month ---
+        # --- adaptive gate: does this trade pay for itself? ---
+        # Compares the model's own predicted edge of the proposed basket over
+        # the one already held against what the switch would cost, and holds
+        # instead of trading when it doesn't clear the bar. Inert unless
+        # rebalance_gain_threshold is set, so the default path still trades
+        # every period unconditionally.
+        # Caveat by construction: the predicted edge is a label_horizon_days-
+        # forward estimate while the cost is immediate and certain, so the two
+        # sides aren't on the same time footing -- the threshold multiple is
+        # what absorbs that mismatch, which is why >1 is the honest setting.
+        skipped = False
+        if cfg.rebalance_gain_threshold is not None and len(prev_weights) > 0:
+            pred_by_ticker = pd.Series(preds, index=X_test.index.get_level_values("ticker"))
+            pred_by_ticker = pred_by_ticker[~pred_by_ticker.index.duplicated(keep="first")]
+            # A held name that has since left the universe scores NaN->0 here,
+            # which tilts the comparison slightly in favour of trading out of
+            # it -- the conservative direction for a name we can no longer rank.
+            pred_new = float((weights * pred_by_ticker.reindex(weights.index)).fillna(0.0).sum())
+            pred_held = float((prev_weights * pred_by_ticker.reindex(prev_weights.index)).fillna(0.0).sum())
+            est_cost = (cfg.spread_bps / 10_000.0) * turnover
+            if capital > 0:
+                est_cost += num_trades * cfg.flat_fee_per_trade_eur / capital
+            if (pred_new - pred_held) <= cfg.rebalance_gain_threshold * est_cost:
+                top_n_tickers = list(prev_weights.index)
+                weights = prev_weights
+                turnover, num_trades = 0.0, 0
+                skipped = True
+
+        turnovers.append(turnover)
+
+        # --- realized return over the holding period ---
         month_end = (period + 1).to_timestamp(how="start") - pd.Timedelta(days=1)
         try:
             start_prices = price_df.loc[:current_start, top_n_tickers].iloc[-1]
             end_prices = price_df.loc[:month_end, top_n_tickers].iloc[-1]
         except (KeyError, IndexError):
+            prev_weights = weights
             continue
 
         valid = start_prices.notna() & end_prices.notna()
         if valid.sum() == 0:
+            prev_weights = weights
             continue
         rets = end_prices[valid] / start_prices[valid] - 1
         w = weights.reindex(rets.index).fillna(0.0)
         w = w / w.sum() if w.sum() > 0 else w
         raw_return = float((rets * w).sum())
+
+        # Holding through a skipped period means the same shares ride the
+        # price move, so next period's turnover has to be measured against
+        # the drifted weights rather than a target that was never traded to.
+        # Only reachable with the gate active; the default path keeps the
+        # original "prev_weights = this period's target" accounting untouched.
+        if skipped and w.sum() > 0:
+            drifted = w * (1.0 + rets)
+            prev_weights = drifted / drifted.sum()
+        else:
+            prev_weights = weights
 
         leverage = 1.0
         if cfg.vol_target is not None and len(hist_returns) > 0:
