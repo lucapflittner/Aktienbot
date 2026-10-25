@@ -131,7 +131,8 @@ def test_tiny_backtest_runs():
     # dates[400]-to-end spans multiple years of weekly periods.
     cfg = StrategyConfig(start_year=dates[400].year, end_year=dates[-1].year,
                           train_window_years=1, top_n=3,
-                          rebalance_freq="M", label_horizon_days=21)
+                          rebalance_freq="M", label_horizon_days=21,
+                          execution_lag_days=0)
     monthly_returns, turnovers, periods = _run_tiny_backtest(cfg, prices, df_tickers)
 
     check("tiny backtest produced some months", len(monthly_returns) > 0)
@@ -163,7 +164,8 @@ def test_tiny_backtest_runs_at_every_rebalance_freq():
     for freq, label_days in [("W", 10), ("M", 21), ("Q", 63)]:
         cfg = StrategyConfig(start_year=eval_start, end_year=eval_end,
                               train_window_years=2, top_n=3, model_n_estimators=10,
-                              rebalance_freq=freq, label_horizon_days=label_days)
+                              rebalance_freq=freq, label_horizon_days=label_days,
+                              execution_lag_days=0)
         monthly_returns, turnovers, periods = _run_tiny_backtest(cfg, prices, df_tickers)
         check(f"tiny backtest produced some periods at rebalance_freq={freq}", len(monthly_returns) > 0)
 
@@ -185,9 +187,18 @@ def test_tiny_backtest_runs_at_every_rebalance_freq():
     })
     # must span >=2 distinct calendar years, or Y gets exactly 1 period and 0 valid (no prev_period)
     y_eval_start, y_eval_end = big_dates[-380].year, big_dates[-1].year
+    # execution_lag_days pinned to 0 here for the same reason rebalance_freq is
+    # pinned above: these are generic mechanical smoke tests and must not
+    # inherit whatever the production config is currently experimenting with.
+    # Yearly is the case that exposes it -- this window holds only two yearly
+    # periods, the first has no predecessor and the second would lose its exit
+    # bar to any nonzero lag, leaving nothing to assert on. That is correct
+    # engine behavior (a position you cannot fill out of cannot be booked, and
+    # on the real corpus there are always later bars), not something to relax.
     cfg_y = StrategyConfig(start_year=y_eval_start, end_year=y_eval_end,
                             train_window_years=3, top_n=3, model_n_estimators=10,
-                            rebalance_freq="Y", label_horizon_days=252)
+                            rebalance_freq="Y", label_horizon_days=252,
+                            execution_lag_days=0)
     monthly_returns, turnovers, periods = _run_tiny_backtest(cfg_y, big_prices, big_df_tickers)
     check("tiny backtest produced some periods at rebalance_freq=Y", len(monthly_returns) > 0)
 
