@@ -34,8 +34,12 @@ class StrategyConfig:
     model_colsample_bytree: float = 0.8  # feature subsampling per tree (1.0 = off, XGBoost default)
     rank_objective: bool = False     # False -> reg:squarederror, True -> rank:pairwise
     include_volume_features: bool = False  # adds illiq_amihud_63d + volume_spike (needs quant_bot/cache/volume.parquet)
-    rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly)
-    check_freq: str = None          # None -> evaluate (and therefore trade) exactly on the
+    rebalance_freq: str = "W"        # pandas period alias: W (weekly) | M (monthly) | Q (quarterly) | Y (yearly).
+                                      # NB: once check_freq below is set, the loop runs on the check
+                                      # grid instead and this value's only remaining job is to serve
+                                      # as the default retrain cadence (see retrain_freq) -- it no
+                                      # longer dictates how often a trade can happen.
+    check_freq: str = "3D"          # None -> evaluate (and therefore trade) exactly on the
                                       # rebalance_freq grid, i.e. the old purely calendar-driven
                                       # behavior. Else a pandas period alias FINER than
                                       # rebalance_freq (e.g. "3D"): the model re-scores the
@@ -45,7 +49,7 @@ class StrategyConfig:
                                       # iterations 39/59/60 only ever tested the coupled version
                                       # (every higher-frequency period forced a full ~170% basket
                                       # turnover), which is what made them catastrophic.
-    rebalance_gain_threshold: float = None  # None -> trade at every period unconditionally (old
+    rebalance_gain_threshold: float = 20.0  # None -> trade at every period unconditionally (old
                                       # behavior). Else: only trade when the model's predicted
                                       # return advantage of the proposed basket over the currently
                                       # held one exceeds this multiple of that round's estimated
