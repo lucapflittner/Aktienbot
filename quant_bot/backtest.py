@@ -91,6 +91,21 @@ def select_top_n_with_corr_cap(ranked_tickers: list, hist_returns: pd.DataFrame,
     return selected[:top_n]
 
 
+def label_cutoff_date(dates: pd.DatetimeIndex, decision_date, label_horizon_days: int):
+    """Latest feature date whose forward label window closes on or before
+    `decision_date` -- i.e. the newest training row that can be used without
+    letting the model see an outcome it could not have known yet.
+
+    A feature row dated d is labelled with the return from d to d +
+    label_horizon_days trading days. Training on rows with d merely < the
+    decision date therefore still leaks: the most recent of them resolve
+    inside the window being predicted. Shifting the cutoff back by the full
+    horizon removes that overlap.
+    """
+    pos = dates.searchsorted(decision_date, side="right") - 1 - label_horizon_days
+    return dates[pos] if pos >= 0 else dates[0] - pd.Timedelta(days=1)
+
+
 def holding_span(dates: pd.DatetimeIndex, period, execution_lag_days: int = 0):
     """Bar positions (i_start, i_end) this period's position is held between,
     or None if no trading day elapses in it.
@@ -182,9 +197,18 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
         need_retrain = model is None or retrain_bucket != last_retrain_bucket
         if need_retrain:
             train_start = current_start - pd.DateOffset(months=round(cfg.train_window_years * 12))
+            # Embargo the tail of the training window. A row dated d carries a
+            # label measuring the return from d to d + label_horizon_days, so
+            # filtering on d < current_start alone (what this did until now)
+            # still admits rows whose OUTCOME window reaches past the decision
+            # date and into the very period being predicted. This file's own
+            # module docstring always claimed labels "whose forward window
+            # closes before t" -- the implementation just never enforced it.
+            # regression_check.py pins it now.
             train_mask = (
                 (features.index.get_level_values("date") >= train_start)
-                & (features.index.get_level_values("date") < current_start)
+                & (features.index.get_level_values("date") <= label_cutoff_date(
+                    price_df.index, current_start, cfg.label_horizon_days))
                 & (features.index.get_level_values("ticker").isin(tickers_for_month))
             )
             if train_mask.sum() < 100:

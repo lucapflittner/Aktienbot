@@ -17,7 +17,7 @@ import pandas as pd
 
 from quant_bot.features import engineer_features
 from quant_bot.weighting import SCHEMES
-from quant_bot.backtest import run_backtest, holding_span
+from quant_bot.backtest import run_backtest, holding_span, label_cutoff_date
 from quant_bot.config import StrategyConfig
 
 CHECKS_PASSED = 0
@@ -76,6 +76,29 @@ def _run_tiny_backtest(cfg: StrategyConfig, prices: pd.DataFrame, df_tickers: pd
     labels.columns = ["date", "ticker", "future_return"]
     labels = labels.set_index(["date", "ticker"])["future_return"]
     return run_backtest(features, labels, prices, df_tickers, cfg)
+
+
+def test_training_labels_close_before_the_decision_date():
+    """No training row may carry a label whose forward window reaches the
+    decision date. Filtering training rows on feature_date < decision_date
+    alone is NOT enough -- the newest such rows resolve inside the very
+    period being predicted, which is a leak the look-ahead test above cannot
+    see (it only checks that features don't move when future prices move).
+    """
+    dates = make_synthetic_prices(n_days=400).index
+
+    for horizon in [1, 10, 21, 63]:
+        decision = dates[300]
+        cutoff = label_cutoff_date(dates, decision, horizon)
+        cutoff_pos = dates.searchsorted(cutoff, side="right") - 1
+        decision_pos = dates.searchsorted(decision, side="right") - 1
+        check(f"label window closes at/before the decision date (horizon={horizon})",
+              cutoff_pos + horizon <= decision_pos)
+
+    # and the cutoff must actually bite: it has to be strictly older than the
+    # naive "anything before the decision date" boundary the code used before
+    check("embargo is not a no-op",
+          label_cutoff_date(dates, dates[300], 10) < dates[300])
 
 
 def test_holding_spans_tile_the_calendar():
@@ -206,6 +229,7 @@ def test_tiny_backtest_runs_at_every_rebalance_freq():
 if __name__ == "__main__":
     test_no_lookahead()
     test_weighting_schemes_valid()
+    test_training_labels_close_before_the_decision_date()
     test_holding_spans_tile_the_calendar()
     test_tiny_backtest_runs()
     test_tiny_backtest_runs_at_every_rebalance_freq()
