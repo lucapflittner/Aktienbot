@@ -91,6 +91,31 @@ def select_top_n_with_corr_cap(ranked_tickers: list, hist_returns: pd.DataFrame,
     return selected[:top_n]
 
 
+def holding_span(dates: pd.DatetimeIndex, period, execution_lag_days: int = 0):
+    """Bar positions (i_start, i_end) this period's position is held between,
+    or None if no trading day elapses in it.
+
+    The exit bar is derived from the NEXT period's start, not from this
+    period's own calendar end, so consecutive spans tile the trading calendar
+    exactly once. Deriving it from the period's own end (the original
+    behavior) left the move from one period's last bar to the next period's
+    first bar booked by nobody: measured over 2018-2023 that silently dropped
+    18.6% of all trading-day transitions at weekly cadence and 33.4% at 3D,
+    while the result was still annualized as though the periods tiled the
+    year completely. regression_check.py pins the tiling invariant.
+
+    execution_lag_days shifts both ends equally: the decision is made from
+    closes up to the period start, so a lag of 1 fills at the next close
+    instead of the very close the signal was computed from. Holding length
+    is unchanged; only which bars the position is entered and exited on move.
+    """
+    i_start = dates.searchsorted(period.to_timestamp(how="start"), side="right") - 1 + execution_lag_days
+    i_end = dates.searchsorted((period + 1).to_timestamp(how="start"), side="right") - 1 + execution_lag_days
+    if i_start < 0 or i_end >= len(dates) or i_start >= i_end:
+        return None
+    return i_start, i_end
+
+
 def _select_universe(df_tickers: pd.DataFrame, year: int, month: int):
     mask = (df_tickers["date"].dt.year == year) & (df_tickers["date"].dt.month == month)
     if mask.sum() == 0:
@@ -126,6 +151,17 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
         tickers_for_month = _select_universe(df_tickers, prev_period.year, prev_period.month)
         if not tickers_for_month:
             continue
+
+        # Resolved before any model work: a period in which no trading day
+        # elapses (e.g. a 3D window landing entirely on a weekend) is not a
+        # rebalance opportunity at all. Booking it as a 0.0 return -- which
+        # is what the old code did, 118 times over 2018-2023 at 3D -- deflates
+        # measured volatility without deflating measured return, inflating
+        # Sharpe precisely in the finer-cadence configs.
+        span = holding_span(price_df.index, period, cfg.execution_lag_days)
+        if span is None:
+            continue
+        i_start, i_end = span
 
         period_end_exclusive = (period + 1).to_timestamp(how="start")
         month_dates = features.index.get_level_values("date")
@@ -222,29 +258,9 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
 
         turnovers.append(turnover)
 
-        # --- realized return over the holding period ---
-        month_end = (period + 1).to_timestamp(how="start") - pd.Timedelta(days=1)
-        if cfg.execution_lag_days:
-            # Everything above (features, ranking, corr cap, sizing) is derived
-            # from closes up to current_start, so the earliest fill a real
-            # trader can get is execution_lag_days closes later. Both ends move
-            # by the same lag: holding length is untouched, only the bars the
-            # position is entered and exited on shift forward.
-            dates = price_df.index
-            i_start = dates.searchsorted(current_start, side="right") - 1 + cfg.execution_lag_days
-            i_end = dates.searchsorted(month_end, side="right") - 1 + cfg.execution_lag_days
-            if i_start < 0 or i_end >= len(dates):
-                prev_weights = weights
-                continue
-            start_prices = price_df.iloc[i_start].reindex(top_n_tickers)
-            end_prices = price_df.iloc[i_end].reindex(top_n_tickers)
-        else:
-            try:
-                start_prices = price_df.loc[:current_start, top_n_tickers].iloc[-1]
-                end_prices = price_df.loc[:month_end, top_n_tickers].iloc[-1]
-            except (KeyError, IndexError):
-                prev_weights = weights
-                continue
+        # --- realized return over the holding period (span fixed above) ---
+        start_prices = price_df.iloc[i_start].reindex(top_n_tickers)
+        end_prices = price_df.iloc[i_end].reindex(top_n_tickers)
 
         valid = start_prices.notna() & end_prices.notna()
         if valid.sum() == 0:

@@ -17,7 +17,7 @@ import pandas as pd
 
 from quant_bot.features import engineer_features
 from quant_bot.weighting import SCHEMES
-from quant_bot.backtest import run_backtest
+from quant_bot.backtest import run_backtest, holding_span
 from quant_bot.config import StrategyConfig
 
 CHECKS_PASSED = 0
@@ -76,6 +76,34 @@ def _run_tiny_backtest(cfg: StrategyConfig, prices: pd.DataFrame, df_tickers: pd
     labels.columns = ["date", "ticker", "future_return"]
     labels = labels.set_index(["date", "ticker"])["future_return"]
     return run_backtest(features, labels, prices, df_tickers, cfg)
+
+
+def test_holding_spans_tile_the_calendar():
+    """Consecutive holding spans must hand off exactly: one period's exit bar
+    is the next period's entry bar. Without this, the move between them is
+    booked by nobody while the result is still annualized as if the periods
+    tiled the year -- the flaw that silently dropped 18.6% of trading-day
+    transitions at weekly cadence and 33.4% at 3D, and made Sharpe values
+    measured at different cadences incomparable.
+    """
+    prices = make_synthetic_prices(n_days=900, n_tickers=4)
+    dates = prices.index
+
+    for freq in ["W", "M", "3D"]:
+        for lag in [0, 1]:
+            periods = pd.period_range(dates[0], dates[-1], freq=freq)
+            spans = [(p, holding_span(dates, p, lag)) for p in periods]
+            spans = [(p, s) for p, s in spans if s is not None]
+
+            gaps = [
+                (prev_p, next_p)
+                for (prev_p, (_, prev_end)), (next_p, (next_start, _))
+                in zip(spans, spans[1:])
+                if prev_end != next_start
+            ]
+            check(f"holding spans tile without gaps (freq={freq}, lag={lag})", not gaps)
+            check(f"holding spans are non-empty (freq={freq}, lag={lag})",
+                  all(s[0] < s[1] for _, s in spans))
 
 
 def test_tiny_backtest_runs():
@@ -167,6 +195,7 @@ def test_tiny_backtest_runs_at_every_rebalance_freq():
 if __name__ == "__main__":
     test_no_lookahead()
     test_weighting_schemes_valid()
+    test_holding_spans_tile_the_calendar()
     test_tiny_backtest_runs()
     test_tiny_backtest_runs_at_every_rebalance_freq()
     print(f"passed: {CHECKS_PASSED}")
