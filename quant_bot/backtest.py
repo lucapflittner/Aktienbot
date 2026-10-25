@@ -224,12 +224,27 @@ def run_backtest(features: pd.DataFrame, labels: pd.Series, price_df: pd.DataFra
 
         # --- realized return over the holding period ---
         month_end = (period + 1).to_timestamp(how="start") - pd.Timedelta(days=1)
-        try:
-            start_prices = price_df.loc[:current_start, top_n_tickers].iloc[-1]
-            end_prices = price_df.loc[:month_end, top_n_tickers].iloc[-1]
-        except (KeyError, IndexError):
-            prev_weights = weights
-            continue
+        if cfg.execution_lag_days:
+            # Everything above (features, ranking, corr cap, sizing) is derived
+            # from closes up to current_start, so the earliest fill a real
+            # trader can get is execution_lag_days closes later. Both ends move
+            # by the same lag: holding length is untouched, only the bars the
+            # position is entered and exited on shift forward.
+            dates = price_df.index
+            i_start = dates.searchsorted(current_start, side="right") - 1 + cfg.execution_lag_days
+            i_end = dates.searchsorted(month_end, side="right") - 1 + cfg.execution_lag_days
+            if i_start < 0 or i_end >= len(dates):
+                prev_weights = weights
+                continue
+            start_prices = price_df.iloc[i_start].reindex(top_n_tickers)
+            end_prices = price_df.iloc[i_end].reindex(top_n_tickers)
+        else:
+            try:
+                start_prices = price_df.loc[:current_start, top_n_tickers].iloc[-1]
+                end_prices = price_df.loc[:month_end, top_n_tickers].iloc[-1]
+            except (KeyError, IndexError):
+                prev_weights = weights
+                continue
 
         valid = start_prices.notna() & end_prices.notna()
         if valid.sum() == 0:

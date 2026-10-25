@@ -24,6 +24,14 @@ class StrategyConfig:
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63
+    execution_lag_days: int = 1     # 0 -> enter/exit at the same close the signal was built from
+                                      # (the original, and strictly unachievable: features at date t
+                                      # are computed FROM t's close, so trading at t's close means
+                                      # trading on information the price already contains). 1 -> act
+                                      # at the next close, which is the earliest a real trader who
+                                      # decides after the bell can fill. Shifts both ends of the
+                                      # holding window equally, so holding length is unchanged and
+                                      # only the entry/exit bars move.
     spread_bps: float = 7.5          # bid-ask spread cost charged on turnover, in basis points
     capital_eur: float = 10_000.0   # assumed account size, for sizing the flat per-trade fee below
     flat_fee_per_trade_eur: float = 1.0  # fixed broker fee per buy or sell order (not per round-trip)

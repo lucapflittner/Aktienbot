@@ -10,6 +10,7 @@ ran, to check whether autoresearch's picked config holds up outside the
 window it was selected on.
 """
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -170,11 +171,36 @@ def _rebalance_bench(prices: pd.DataFrame, universe: list, D: pd.Timestamp, stat
     state["bench"]["cash"] = 0.0
 
 
+def _warn_about_unimplemented_knobs(cfg):
+    """This engine deliberately implements only a subset of StrategyConfig:
+    it rebalances on cfg.rebalance_freq, unconditionally, at the same close
+    the signal was built from. Research-only knobs that backtest.py honors but
+    this engine does not would otherwise be ignored in silence, which would
+    make the live track record quietly stop matching the config it claims to
+    run. Warn loudly instead of either crashing (the forward record is worth
+    more than strictness) or pretending (which is how you end up trusting a
+    number that measured something else -- cf. the holdout_check mismatch).
+    """
+    ignored = []
+    if getattr(cfg, "check_freq", None) is not None:
+        ignored.append(f"check_freq={cfg.check_freq!r} (live still rebalances every {cfg.rebalance_freq})")
+    if getattr(cfg, "rebalance_gain_threshold", None) is not None:
+        ignored.append(f"rebalance_gain_threshold={cfg.rebalance_gain_threshold!r} (live trades unconditionally)")
+    if getattr(cfg, "execution_lag_days", 0):
+        ignored.append(f"execution_lag_days={cfg.execution_lag_days!r} (live fills at the signal's own close)")
+    if ignored:
+        print("WARNING: paper_trading does not implement these DEFAULT_CONFIG settings, "
+              "so the live track record does NOT reflect them:", file=sys.stderr)
+        for item in ignored:
+            print(f"  - {item}", file=sys.stderr)
+
+
 def process_new_days() -> list:
     """Walks forward through every real trading day fetched since the last
     run that hasn't been processed yet, one at a time, in order. Returns a
     list of per-day summary dicts (also appended to nav_log.csv)."""
     cfg = DEFAULT_CONFIG
+    _warn_about_unimplemented_knobs(cfg)
     prices = load_combined_prices()
     universe = get_current_universe()
     universe = [t for t in universe if t in prices.columns]
