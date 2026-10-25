@@ -2,8 +2,16 @@ name: Paper Trading Daily
 
 on:
   schedule:
-    # 22:00 UTC ~= 23:00-24:00 CET/CEST depending on daylight saving
-    - cron: "0 22 * * *"
+    # ~45 min after the NYSE close, so the Telegram rebalance ping lands
+    # around 22:45 German local time -- in time for extended-hours trading
+    # (e.g. Trade Republic via Lang & Schwarz, open until 23:00) same
+    # evening instead of the next morning's XETRA pre-market.
+    # Two entries because US/EU DST shift the close's UTC time by season,
+    # but not always on the same calendar day -- during the ~1-3 week
+    # mismatch windows around the March/Oct-Nov transitions this lands up
+    # to an hour early/late; not worth more precision for a convenience ping.
+    - cron: "45 20 * 4-10 *"   # Apr-Oct: NYSE closes 20:00 UTC (EDT)
+    - cron: "45 21 * 11,12,1,2,3 *"  # Nov-Mar: NYSE closes 21:00 UTC (EST)
   workflow_dispatch: {}
 
 permissions:
@@ -23,6 +31,9 @@ jobs:
         run: pip install pandas numpy scipy xgboost scikit-learn yfinance openpyxl pyarrow
 
       - name: Run paper trading engine
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m paper_trading.run_daily
 
       - name: Commit updated state

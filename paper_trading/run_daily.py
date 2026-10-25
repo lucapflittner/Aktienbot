@@ -10,6 +10,7 @@ from datetime import datetime
 
 from paper_trading.live_data import update_live_prices
 from paper_trading.engine import process_new_days, load_state
+from paper_trading.telegram_notify import send_message, format_rebalance_message
 
 
 def main():
@@ -18,6 +19,11 @@ def main():
         update_live_prices()
     except Exception as e:
         print(f"WARNING: live price fetch failed ({e}); using whatever is already cached", file=sys.stderr)
+
+    # picks before this run's rebalance(s), so the first new rebalance (if
+    # any) can still show a proper added/removed diff against it
+    trade_log_before = load_state()["trade_log"]
+    previous_picks = trade_log_before[-1]["picks"] if trade_log_before else []
 
     summaries = process_new_days()
     if not summaries:
@@ -31,6 +37,11 @@ def main():
             else:
                 print(f"{s['date']}: REBALANCED -> {s['picks']} "
                       f"(trades={s['num_trades']}, cost=EUR{s['spread_cost_eur'] + s['flat_cost_eur']:.2f})")
+                try:
+                    send_message(format_rebalance_message(s, previous_picks))
+                except Exception as e:
+                    print(f"WARNING: Telegram notification failed ({e})", file=sys.stderr)
+                previous_picks = s["picks"]
         else:
             print(f"{s['date']}: mark-to-market only")
 

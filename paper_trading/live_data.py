@@ -61,6 +61,21 @@ def update_live_prices() -> pd.DataFrame:
         return live
 
     new_closes = new_closes.reindex(columns=universe)
+
+    # Running closer to the NYSE close (for same-evening extended-hours
+    # trading) risks catching a day before yfinance has finalized it --
+    # such a day comes back mostly NaN. Drop it rather than permanently
+    # baking in incomplete data: fetch_start next run is still the day
+    # before, so it's simply retried, no silent corruption of live_prices.
+    coverage = new_closes.notna().mean(axis=1)
+    incomplete = coverage < 0.8
+    if incomplete.any():
+        first_bad = new_closes.index[incomplete][0]
+        print(f"WARNING: dropping {incomplete.sum()} day(s) from {first_bad.date()} with <80% "
+              f"ticker coverage (likely not yet finalized); will retry on next run")
+        new_closes = new_closes.loc[new_closes.index < first_bad]
+        if len(new_closes) == 0:
+            return live
     combined = new_closes if live.empty else pd.concat([live, new_closes], axis=0)
     combined = combined[~combined.index.duplicated(keep="last")].sort_index()
     combined.to_parquet(LIVE_PRICES_PATH)
