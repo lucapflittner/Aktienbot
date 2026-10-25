@@ -21,6 +21,7 @@ import time
 
 import numpy as np
 
+from benchmark import _periods_per_year
 from quant_bot import data, metrics
 from quant_bot.backtest import buy_and_hold, run_backtest
 from quant_bot.config import DEFAULT_CONFIG
@@ -37,9 +38,10 @@ def main():
     price_df = data.load_prices()
     df_tickers = data.load_universe(cfg.train_window_years, cfg.start_year)
     volume_df = data.load_volume() if cfg.include_volume_features else None
+    effective_freq = cfg.check_freq or cfg.rebalance_freq
     features, labels = get_features_and_labels(price_df, cfg.label_horizon_days,
                                                 volume_df, cfg.include_volume_features,
-                                                cfg.rebalance_freq)
+                                                effective_freq)
 
     period_returns, turnovers, periods = run_backtest(features, labels, price_df, df_tickers, cfg)
     if len(period_returns) == 0:
@@ -47,7 +49,7 @@ def main():
         print("ERROR: holdout backtest produced zero periods", file=sys.stderr)
         sys.exit(1)
 
-    periods_per_year = {"W": 52, "M": 12, "Q": 4, "A": 1, "Y": 1}.get(cfg.rebalance_freq, 12)
+    periods_per_year = _periods_per_year(effective_freq)
     m = metrics.summarize(period_returns, periods_per_year)
     bh_returns = buy_and_hold(price_df, df_tickers, cfg.start_year, cfg.end_year)
     bh = metrics.summarize(bh_returns)
