@@ -24,7 +24,7 @@ class StrategyConfig:
     weighting: str = "inverse_vol"  # equal | inverse_vol | hrp
     vol_target: float = None        # None disables the vol-targeting overlay; else annualized target e.g. 0.15
     vol_target_lookback: int = 63
-    execution_lag_days: int = 0     # 0 -> enter/exit at the same close the signal was built from
+    execution_lag_days: int = 1     # 0 -> enter/exit at the same close the signal was built from
                                       # (the original, and strictly unachievable: features at date t
                                       # are computed FROM t's close, so trading at t's close means
                                       # trading on information the price already contains). 1 -> act
