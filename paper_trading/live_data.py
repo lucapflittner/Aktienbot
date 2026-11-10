@@ -62,6 +62,24 @@ def update_live_prices() -> pd.DataFrame:
 
     new_closes = new_closes.reindex(columns=universe)
 
+    # yfinance applies `start` per ticker, in that ticker's own exchange
+    # timezone, so a bulk download can hand back a leading row for a session
+    # we already stored -- a few names populated, the rest NaN. That row is not
+    # an unfinalized day, it is a day we already have, and letting it reach the
+    # coverage guard below is exactly what froze this system between 2026-10-30
+    # and 2026-11-10: the guard saw ~0.2% coverage on the stale row, truncated
+    # everything from it onward, and therefore discarded every genuinely new
+    # day on every run, indefinitely, while the Actions job still reported
+    # success. Only days strictly newer than what we already have may ever be
+    # appended, so enforce that before judging coverage.
+    stale = new_closes.index <= known_max
+    if stale.any():
+        print(f"note: ignoring {int(stale.sum())} already-stored day(s) up to "
+              f"{known_max.date()} returned by yfinance ahead of fetch_start")
+        new_closes = new_closes.loc[~stale]
+    if len(new_closes) == 0:
+        return live
+
     # Running closer to the NYSE close (for same-evening extended-hours
     # trading) risks catching a day before yfinance has finalized it --
     # such a day comes back mostly NaN. Drop it rather than permanently
