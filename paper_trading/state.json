@@ -1,7 +1,7 @@
 {
   "capital_eur": 10000.0,
   "inception_date": "2026-07-24",
-  "last_processed_date": "2026-11-18",
+  "last_processed_date": "2026-11-19",
   "last_rebalance_month": "2026-11-16/2026-11-22",
   "bot": {
     "cash": 0.0,
