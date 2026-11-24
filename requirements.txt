@@ -1,0 +1,7 @@
+pandas>=2.1
+numpy>=1.26
+requests>=2.31
+yfinance>=0.2.50
+feedparser>=6.0
+tzdata>=2024.1   # time zones on Windows (zoneinfo has no system database there)
+pytest>=8.0
